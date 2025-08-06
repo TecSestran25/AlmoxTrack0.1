@@ -1,5 +1,7 @@
 {
   "projects": {
-    "default": "almoxtracktest"
-  }
+    "default": "prot-almox-sestran"
+  },
+  "targets": {},
+  "etags": {}
 }
