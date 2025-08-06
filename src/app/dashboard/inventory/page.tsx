@@ -52,7 +52,6 @@ export default function InventoryPage() {
   const [itemPendingDeletion, setItemPendingDeletion] = React.useState<Product | null>(null);
    const [actionToConfirm, setActionToConfirm] = React.useState<(() => void) | null>(null);
    const [deleteConfirmationText, setDeleteConfirmationText] = React.useState("");
-   console.log("User:", user?.email);
 
 
 

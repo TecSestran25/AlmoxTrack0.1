@@ -123,7 +123,6 @@ export function AddItemSheet({ isOpen, onOpenChange, onItemAdded }: AddItemSheet
 };
 
   const onSubmit = (data: AddItemFormValues) => {
-    console.log("Payload enviado:", data);
     onItemAdded(data);
     onOpenChange(false);
   };
