@@ -191,7 +191,11 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                         <AvatarFallback>{user.email ? user.email[0].toUpperCase() : 'U'}</AvatarFallback>
                     </Avatar>
                     <div className="flex flex-col items-start text-sm">
-                        <span className="font-medium text-sidebar-foreground">{user.email}</span>
+                        <span className="font-medium text-sidebar-foreground">
+                          {user.email && user.email.length > 18
+                              ? `${user.email.substring(0, 18)}...`
+                              : user.email}
+                        </span>
                         <span className="text-muted-foreground text-xs">{userRole}</span>
                     </div>
                     </div>
