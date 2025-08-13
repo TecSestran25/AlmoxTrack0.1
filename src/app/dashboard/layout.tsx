@@ -166,18 +166,6 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                 </SidebarMenuButton>
                 </SidebarMenuItem>
             ))}
-            {/* {userRole === 'Admin' && (
-                <SidebarMenuItem>
-                <SidebarMenuButton
-                    onClick={() => setIsAuthDialogOpen(true)}
-                    tooltip={"Sincronizar Planilha"}
-                    className="h-12 justify-start"
-                >
-                    <FileCog />
-                    <span>{"Sincronizar Planilha"}</span>
-                </SidebarMenuButton>
-                </SidebarMenuItem>
-            )} */}
             </SidebarMenu>
         </SidebarContent>
         <SidebarSeparator />
