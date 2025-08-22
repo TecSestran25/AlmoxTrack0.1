@@ -15,6 +15,8 @@ export type Product = {
     unit: string;
     category: string;
     reference: string;
+    expirationDate?: string;
+    isPerishable?: 'Não' | 'Sim';
 };
 
 export type Movement = {
