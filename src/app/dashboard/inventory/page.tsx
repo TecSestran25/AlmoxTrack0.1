@@ -2,7 +2,9 @@
 
 import * as React from "react";
 import Image from "next/image";
-import { PlusCircle, Search, History, Edit, MoreHorizontal, Trash2 } from "lucide-react";
+import { PlusCircle, Search, History, Edit, MoreHorizontal, Trash2, AlertTriangle, BadgeAlert } from "lucide-react";
+import { format, differenceInMonths, parseISO } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -36,6 +38,51 @@ import { useToast } from "@/hooks/use-toast";
 import type { Product } from "@/lib/firestore";
 import { getProducts, addProduct, updateProduct, deleteProduct, addMovement, uploadImage, generateNextItemCode } from "@/lib/firestore";
 import { useAuth } from "@/contexts/AuthContext";
+import { cn } from "@/lib/utils";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
+const getExpirationStatus = (expirationDate?: string): 'alert' | 'warning' | 'reminder' | null => {
+  if (!expirationDate) return null;
+  const today = new Date();
+  const expiresOn = parseISO(expirationDate);
+  const monthsDifference = differenceInMonths(expiresOn, today);
+
+  if (monthsDifference < 1) {
+    return 'alert';
+  } else if (monthsDifference < 2) {
+    return 'warning';
+  } else if (monthsDifference < 3) {
+    return 'reminder';
+  }
+  return null;
+};
+
+const getAlertIcon = (status: 'alert' | 'warning' | 'reminder' | null) => {
+    switch(status) {
+        case 'alert':
+            return <AlertTriangle className="h-4 w-4 text-red-500" />;
+        case 'warning':
+            return <BadgeAlert className="h-4 w-4 text-orange-500" />;
+        case 'reminder':
+            return <BadgeAlert className="h-4 w-4 text-yellow-500" />;
+        default:
+            return null;
+    }
+};
+
+const getTooltipText = (status: 'alert' | 'warning' | 'reminder' | null, date: string) => {
+    switch(status) {
+        case 'alert':
+            return `Vencimento muito próximo: ${format(parseISO(date), 'dd/MM/yyyy')}`;
+        case 'warning':
+            return `Vencimento em breve: ${format(parseISO(date), 'dd/MM/yyyy')}`;
+        case 'reminder':
+            return `Lembrete: Vencimento em ${format(parseISO(date), 'dd/MM/yyyy')}`;
+        default:
+            return '';
+    }
+}
+
 
 export default function InventoryPage() {
   const { user, userRole } = useAuth();
@@ -270,6 +317,7 @@ const handleUpdateItem = async (updatedItemData: any) => {
 
   return (
     <>
+    <TooltipProvider>
       <div className="flex flex-col gap-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
@@ -305,6 +353,7 @@ const handleUpdateItem = async (updatedItemData: any) => {
                     <TableHead>Nome</TableHead>
                     <TableHead className="hidden md:table-cell">Tipo</TableHead>
                     <TableHead className="hidden lg:table-cell">Categoria</TableHead>
+                    <TableHead>Alerta</TableHead>
                     <TableHead className="text-right">Qtd. em Estoque</TableHead>
                     <TableHead className="w-[100px] text-center">Ações</TableHead>
                   </TableRow>
@@ -312,86 +361,107 @@ const handleUpdateItem = async (updatedItemData: any) => {
                 <TableBody>
                   {isLoading ? (
                      <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground">Carregando inventário...</TableCell>
+                      <TableCell colSpan={7} className="text-center text-muted-foreground">Carregando inventário...</TableCell>
                     </TableRow>
                   ) : products.length > 0 ? (
-                    products.map((product) => (
-                      <TableRow key={product.id}>
-                        <TableCell>
-                          <Image
-                            src={product.image || "https://placehold.co/40x40.png"}
-                            alt={product.name}
-                            width={40}
-                            height={40}
-                            className="rounded-md object-cover aspect-square"
-                            data-ai-hint="product image"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <div className="font-medium">{product.name}</div>
-                          <div className="text-sm text-muted-foreground">
-                            Código: {product.code}
-                          </div>
-                           <div className="text-sm text-muted-foreground md:hidden">
-                            Patrimônio: {product.patrimony}
-                          </div>
-                        </TableCell>
-                        <TableCell className="hidden md:table-cell">
-                          <Badge variant={product.type === 'permanente' ? 'secondary' : 'outline'}>
-                            {product.type}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="hidden lg:table-cell">{product.category}</TableCell>
-                        <TableCell className="text-right">
-                          <div className="font-medium">{product.quantity}</div>
-                          <div className="text-sm text-muted-foreground">{product.unit}</div>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button aria-haspopup="true" size="icon" variant="ghost">
-                                <MoreHorizontal className="h-4 w-4" />
-                                <span className="sr-only">Toggle menu</span>
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => handleMovementsClick(product)}>
-                                <History className="mr-2 h-4 w-4" />
-                                <span>Ver Movimentações</span>
-                              </DropdownMenuItem>
-                              {userRole === 'Admin' && (
-                                <>
-                                  <DropdownMenuItem onClick={() => {
-                                  setActionToConfirm(() => () => {
-                                    setSelectedItem(product);
-                                    setIsEditSheetOpen(true);
-                                  });
-                                  setIsReauthOpen(true);
-                                  }}>
-                                    <Edit className="mr-2 h-4 w-4" />
-                                    <span>Editar Item</span>
-                                  </DropdownMenuItem>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem 
-                                    className="text-red-600" 
-                                     onClick={() => {
-                                     setActionToConfirm(() => () => handleDeleteItem(product.id));
-                                     setIsReauthOpen(true);
-                                   }}
-                                  >
-                                    <Trash2 className="mr-2 h-4 w-4" />
-                                    <span>Excluir</span>
-                                  </DropdownMenuItem>
-                                </>
+                    products.map((product) => {
+                        const expirationStatus = product.isPerishable === 'Sim' && product.expirationDate ? getExpirationStatus(product.expirationDate) : null;
+                        const alertIcon = getAlertIcon(expirationStatus);
+                        const tooltipText = getTooltipText(expirationStatus, product.expirationDate || '');
+                        const patrimonyText = product.type === 'permanente' 
+                            ? (product.patrimony && product.patrimony !== 'N/A' ? product.patrimony : product.code)
+                            : 'N/A';
+
+                        return (
+                          <TableRow key={product.id}>
+                            <TableCell>
+                              <Image
+                                src={product.image || "https://placehold.co/40x40.png"}
+                                alt={product.name}
+                                width={40}
+                                height={40}
+                                className="rounded-md object-cover aspect-square"
+                                data-ai-hint="product image"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <div className="font-medium">{product.name}</div>
+                              <div className="text-sm text-muted-foreground">
+                                Código: {product.code}
+                              </div>
+                               <div className="text-sm text-muted-foreground md:hidden">
+                                Patrimônio: {patrimonyText}
+                              </div>
+                            </TableCell>
+                            <TableCell className="hidden md:table-cell">
+                              <Badge variant={product.type === 'permanente' ? 'secondary' : 'outline'}>
+                                {product.type}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="hidden lg:table-cell">{product.category}</TableCell>
+                            <TableCell className="text-center">
+                              {alertIcon && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="cursor-pointer">{alertIcon}</span>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>{tooltipText}</p>
+                                  </TooltipContent>
+                                </Tooltip>
                               )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    ))
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="font-medium">{product.quantity}</div>
+                              <div className="text-sm text-muted-foreground">{product.unit}</div>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button aria-haspopup="true" size="icon" variant="ghost">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                    <span className="sr-only">Toggle menu</span>
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onClick={() => handleMovementsClick(product)}>
+                                    <History className="mr-2 h-4 w-4" />
+                                    <span>Ver Movimentações</span>
+                                  </DropdownMenuItem>
+                                  {userRole === 'Admin' && (
+                                    <>
+                                      <DropdownMenuItem onClick={() => {
+                                      setActionToConfirm(() => () => {
+                                        setSelectedItem(product);
+                                        setIsEditSheetOpen(true);
+                                      });
+                                      setIsReauthOpen(true);
+                                      }}>
+                                        <Edit className="mr-2 h-4 w-4" />
+                                        <span>Editar Item</span>
+                                      </DropdownMenuItem>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem 
+                                        className="text-red-600" 
+                                         onClick={() => {
+                                         setActionToConfirm(() => () => handleDeleteItem(product.id));
+                                         setIsReauthOpen(true);
+                                       }}
+                                      >
+                                        <Trash2 className="mr-2 h-4 w-4" />
+                                        <span>Excluir</span>
+                                      </DropdownMenuItem>
+                                    </>
+                                  )}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </TableCell>
+                          </TableRow>
+                        );
+                    })
                   ) : (
                     <TableRow>
-                        <TableCell colSpan={6} className="text-center text-muted-foreground">Nenhum produto encontrado.</TableCell>
+                        <TableCell colSpan={7} className="text-center text-muted-foreground">Nenhum produto encontrado.</TableCell>
                     </TableRow>
                   )}
                 </TableBody>
@@ -425,6 +495,7 @@ const handleUpdateItem = async (updatedItemData: any) => {
         onOpenChange={setIsReauthOpen}
         onSuccess={handleReauthSuccess}
       />
+      </TooltipProvider>
     </>
   );
 }
