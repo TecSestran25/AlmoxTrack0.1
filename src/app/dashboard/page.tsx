@@ -13,7 +13,7 @@ import {
   LineChart,
   Line,
 } from "recharts";
-import { format, subDays, parseISO, isValid } from "date-fns";
+import { format, subDays, parseISO, isValid, differenceInMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
   ArrowDown,
@@ -76,6 +76,27 @@ export default function DashboardPage() {
     setEndDate(defaultEndDate);
   }, []);
   
+  // Função auxiliar para checar alertas de vencimento
+  const checkExpirationAlerts = React.useCallback((productsList: Product[]) => {
+    const today = new Date();
+    const expiringItems = productsList.filter(p => 
+      p.isPerishable === 'Sim' && p.expirationDate && differenceInMonths(parseISO(p.expirationDate), today) < 3
+    );
+
+    if (expiringItems.length > 0) {
+      const alertDescription = expiringItems.map(p => 
+        `${p.name} (vence em ${format(parseISO(p.expirationDate!), 'dd/MM/yyyy', { locale: ptBR })})`
+      ).join('; ');
+      
+      toast({
+        title: "Alerta de Vencimento!",
+        description: alertDescription,
+        variant: "destructive",
+        duration: 9000,
+      });
+    }
+  }, [toast]);
+
   const fetchDashboardData = React.useCallback(async () => {
     if (!startDate || !endDate) return;
 
@@ -100,6 +121,9 @@ export default function DashboardPage() {
       const uniqueDeps = [...new Set(allMovementsForDepartments.map((m) => m.department))].filter((dep): dep is string => typeof dep === 'string');
       setAllDepartments(uniqueDeps);
 
+      // Chamar a função de alerta após carregar os produtos
+      checkExpirationAlerts(productsData);
+
     } catch (error) {
       toast({
         title: "Erro ao Carregar Dados",
@@ -109,7 +133,7 @@ export default function DashboardPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [startDate, endDate, movementType, materialType, department, toast]);
+  }, [startDate, endDate, movementType, materialType, department, toast, checkExpirationAlerts]);
 
   React.useEffect(() => {
     fetchDashboardData();
@@ -514,7 +538,7 @@ export default function DashboardPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-             {top10Items.length > 0 ? (
+              {top10Items.length > 0 ? (
                 <ResponsiveContainer width="100%" height={350}>
                 <BarChart data={top10Items} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" />
@@ -537,11 +561,11 @@ export default function DashboardPage() {
                     />
                 </BarChart>
                 </ResponsiveContainer>
-             ) : (
+              ) : (
                 <div className="flex h-[350px] w-full items-center justify-center">
                     <p className="text-muted-foreground">Nenhum dado para exibir.</p>
                 </div>
-             )}
+              )}
           </CardContent>
         </Card>
       </div>
