@@ -47,6 +47,8 @@ type ReceivedItem = {
     name: string;
     quantity: number;
     unit: string;
+    isPerishable?: 'Sim' | 'Não';
+    expirationDate?: string;
 };
 
 export default function EntryPage() {
@@ -57,16 +59,19 @@ export default function EntryPage() {
     const [responsible, setResponsible] = React.useState("");
     const [quantity, setQuantity] = React.useState(1);
     const [receivedItems, setReceivedItems] = React.useState<ReceivedItem[]>([]);
-    
     const [isAddItemSheetOpen, setIsAddItemSheetOpen] = React.useState(false);
     const [isLoading, setIsLoading] = React.useState(false);
     const [isFinalizing, setIsFinalizing] = React.useState(false);
     const [selectedItemForAddition, setSelectedItemForAddition] = React.useState<Product | null>(null);
     const [entryType, setEntryType] = React.useState<'Oficial' | 'Não Oficial'>('Oficial');
+    const [expirationDate, setExpirationDate] = React.useState<Date | undefined>(undefined);
     const { user } = useAuth();
 
     const handleSelectSearchItem = (item: Product) => {
         setSelectedItemForAddition(item);
+        if (item.isPerishable !== 'Sim') {
+            setExpirationDate(undefined);
+        }
     }
     
     const handleAddToList = () => {
@@ -89,16 +94,33 @@ export default function EntryPage() {
             return;
         }
 
+        if (item.isPerishable === 'Sim' && !expirationDate) {
+            toast({
+                title: "Data de Validade obrigatória",
+                description: "Por favor, insira a data de validade para este item perecível.",
+                variant: "destructive",
+            });
+            return;
+        }
+
         setReceivedItems(prev => {
             const existing = prev.find(i => i.id === item.id);
             if (existing) {
                 return prev.map(i => i.id === item.id ? { ...i, quantity: i.quantity + quantity } : i);
             }
-            return [...prev, { id: item.id, name: item.name, quantity, unit: item.unit }];
+            return [...prev, { 
+                id: item.id, 
+                name: item.name, 
+                quantity, 
+                unit: item.unit,
+                isPerishable: item.isPerishable,
+                expirationDate: item.isPerishable === 'Sim' ? expirationDate?.toISOString() : undefined
+            }];
         });
         
         setQuantity(1);
         setSelectedItemForAddition(null);
+        setExpirationDate(undefined);
     };
 
     const handleRemoveFromList = (itemId: string) => {
@@ -130,6 +152,8 @@ export default function EntryPage() {
                 category: finalCategory,
                 reference: newItemData.reference,
                 image: imageUrl,
+                isPerishable: newItemData.isPerishable,
+                expirationDate: newItemData.expirationDate,
             };
             
             const newProductId = await addProduct(newProductData);
@@ -144,29 +168,42 @@ export default function EntryPage() {
                     id: newProductId,
                     name: newProductData.name,
                     quantity: newItemData.initialQuantity,
-                    unit: newProductData.unit
+                    unit: newProductData.unit,
+                    isPerishable: newProductData.isPerishable,
+                    expirationDate: newProductData.expirationDate,
                 }]);
             }
         } catch (error) {
-             toast({
-                title: "Erro ao Adicionar Item",
-                description: "Não foi possível adicionar o novo item.",
-                variant: "destructive",
-            });
-        } finally {
-            setIsLoading(false);
-            setIsAddItemSheetOpen(false);
-        }
-    };
+                toast({
+                    title: "Erro ao Adicionar Item",
+                    description: "Não foi possível adicionar o novo item.",
+                    variant: "destructive",
+                });
+            } finally {
+                setIsLoading(false);
+                setIsAddItemSheetOpen(false);
+            }
+        };
 
     const handleFinalizeEntry = async () => {
     if (receivedItems.length === 0 || !supplier || !responsible) {
-        toast({ title: "Campos obrigatórios", description: "Preencha a data, fornecedor/secretaria, responsável e adicione pelo menos um item.", variant: "destructive" });
-        return;
+      toast({ title: "Campos obrigatórios", description: "Preencha a data, fornecedor/secretaria, responsável e adicione pelo menos um item.", variant: "destructive" });
+      return;
     }
     if (entryType === 'Oficial' && !invoice) {
-        toast({ title: "Campo obrigatório", description: "Para entradas oficiais, a nota fiscal é obrigatória.", variant: "destructive" });
-        return;
+      toast({ title: "Campo obrigatório", description: "Para entradas oficiais, a nota fiscal é obrigatória.", variant: "destructive" });
+      return;
+    }
+
+    for(const item of receivedItems) {
+      if (item.isPerishable === 'Sim' && !item.expirationDate) {
+         toast({ 
+            title: "Data de Validade pendente", 
+            description: `O item '${item.name}' é perecível e está sem data de validade.`, 
+            variant: "destructive" 
+         });
+         return;
+      }
     }
 
     setIsFinalizing(true);
@@ -179,9 +216,6 @@ export default function EntryPage() {
             entryType: entryType,
             invoice: entryType === 'Oficial' ? invoice : undefined,
         };
-        if (entryType === 'Oficial') {
-            entryPayload.invoice = invoice;
-        }
 
         await finalizeEntry(entryPayload);
         
@@ -287,6 +321,28 @@ export default function EntryPage() {
                                 </div>
                                 <Button onClick={handleAddToList} className="w-full md:w-auto">Adicionar</Button>
                             </div>
+                            
+                            {selectedItemForAddition && selectedItemForAddition.isPerishable === 'Sim' && (
+                                <div className="mt-2 space-y-2">
+                                    <label htmlFor="expiration-date" className="text-sm font-medium">Data de Validade</label>
+                                    <Popover>
+                                        <PopoverTrigger asChild>
+                                            <Button
+                                                id="expiration-date"
+                                                variant={"outline"}
+                                                className={cn("w-full justify-start text-left font-normal", !expirationDate && "text-muted-foreground")}
+                                            >
+                                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                                {expirationDate ? format(expirationDate, "dd/MM/yyyy", { locale: ptBR }) : <span>Selecione a data de validade</span>}
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-auto p-0">
+                                            <Calendar mode="single" selected={expirationDate} onSelect={setExpirationDate} initialFocus locale={ptBR} />
+                                        </PopoverContent>
+                                    </Popover>
+                                </div>
+                            )}
+
                             {selectedItemForAddition && (
                                 <div className="mt-2 p-2 bg-muted rounded-md text-sm">
                                     Item selecionado: <span className="font-medium">{selectedItemForAddition.name}</span>
@@ -295,37 +351,39 @@ export default function EntryPage() {
                         </CardHeader>
                         <CardContent>
                              <div className="border rounded-md overflow-x-auto">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>Item</TableHead>
-                                            <TableHead className="w-[100px] text-right">Qtd</TableHead>
-                                            <TableHead className="w-[100px] text-center">Ação</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                       {receivedItems.length === 0 ? (
-                                            <TableRow>
-                                                <TableCell colSpan={3} className="text-center text-muted-foreground">
-                                                    Nenhum item adicionado à entrada.
-                                                </TableCell>
-                                            </TableRow>
-                                       ) : (
-                                            receivedItems.map((item) => (
-                                                <TableRow key={item.id}>
-                                                    <TableCell className="font-medium">{item.name}</TableCell>
-                                                    <TableCell className="text-right">{`${item.quantity} ${item.unit}`}</TableCell>
-                                                    <TableCell className="text-center">
-                                                        <Button variant="ghost" size="icon" className="text-red-600 hover:bg-red-100 h-auto p-0" onClick={() => handleRemoveFromList(item.id)}>
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))
-                                       )}
-                                    </TableBody>
-                                </Table>
-                            </div>
+                                 <Table>
+                                     <TableHeader>
+                                         <TableRow>
+                                             <TableHead>Item</TableHead>
+                                             <TableHead>Validade</TableHead>
+                                             <TableHead className="w-[100px] text-right">Qtd</TableHead>
+                                             <TableHead className="w-[100px] text-center">Ação</TableHead>
+                                         </TableRow>
+                                     </TableHeader>
+                                     <TableBody>
+                                        {receivedItems.length === 0 ? (
+                                             <TableRow>
+                                                 <TableCell colSpan={4} className="text-center text-muted-foreground">
+                                                     Nenhum item adicionado à entrada.
+                                                 </TableCell>
+                                             </TableRow>
+                                        ) : (
+                                             receivedItems.map((item) => (
+                                                 <TableRow key={item.id}>
+                                                     <TableCell className="font-medium">{item.name}</TableCell>
+                                                     <TableCell>{item.expirationDate ? format(new Date(item.expirationDate), 'dd/MM/yyyy') : 'N/A'}</TableCell>
+                                                     <TableCell className="text-right">{`${item.quantity} ${item.unit}`}</TableCell>
+                                                     <TableCell className="text-center">
+                                                         <Button variant="ghost" size="icon" className="text-red-600 hover:bg-red-100 h-auto p-0" onClick={() => handleRemoveFromList(item.id)}>
+                                                             <Trash2 className="h-4 w-4" />
+                                                         </Button>
+                                                     </TableCell>
+                                                 </TableRow>
+                                             ))
+                                        )}
+                                     </TableBody>
+                                 </Table>
+                             </div>
                         </CardContent>
                     </Card>
                     <div className="flex justify-end">
@@ -342,5 +400,5 @@ export default function EntryPage() {
             onItemAdded={handleItemAdded}
         />
     </>
-  );
+    );
 }

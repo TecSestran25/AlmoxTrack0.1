@@ -1,8 +1,7 @@
-
 "use client";
 
 import * as React from "react";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, differenceInMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import type { Movement } from "@/lib/firestore";
@@ -43,6 +42,34 @@ const getBadgeVariant = (type: string) => {
     }
   };
 
+const getExpirationStatus = (expirationDate: string): 'alert' | 'warning' | 'reminder' | null => {
+  const today = new Date();
+  const expiresOn = parseISO(expirationDate);
+  const monthsDifference = differenceInMonths(expiresOn, today);
+
+  if (monthsDifference < 1) {
+    return 'alert';
+  } else if (monthsDifference < 2) {
+    return 'warning';
+  } else if (monthsDifference < 3) {
+    return 'reminder';
+  }
+  return null;
+};
+
+const getTableRowClass = (status: 'alert' | 'warning' | 'reminder' | null) => {
+    switch(status) {
+        case 'alert':
+            return 'bg-red-50 hover:bg-red-100 dark:bg-red-950 dark:hover:bg-red-900';
+        case 'warning':
+            return 'bg-orange-50 hover:bg-orange-100 dark:bg-orange-950 dark:hover:bg-orange-900';
+        case 'reminder':
+            return 'bg-yellow-50 hover:bg-yellow-100 dark:bg-yellow-950 dark:hover:bg-yellow-900';
+        default:
+            return '';
+    }
+};
+
 interface MovementsSheetProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
@@ -79,12 +106,13 @@ export function MovementsSheet({ isOpen, onOpenChange, item }: MovementsSheetPro
           </SheetDescription>
         </SheetHeader>
         <div className="py-6">
-            <div className="border rounded-md">
+            <div className="border rounded-md overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Data e Hora</TableHead>
                     <TableHead>Tipo</TableHead>
+                    <TableHead>Validade</TableHead>
                     <TableHead className="text-right">Quantidade</TableHead>
                     <TableHead>Operador</TableHead>
                   </TableRow>
@@ -92,37 +120,43 @@ export function MovementsSheet({ isOpen, onOpenChange, item }: MovementsSheetPro
                 <TableBody>
                   {isLoading ? (
                      <TableRow>
-                      <TableCell colSpan={4} className="text-center text-muted-foreground">Carregando...</TableCell>
+                      <TableCell colSpan={5} className="text-center text-muted-foreground">Carregando...</TableCell>
                     </TableRow>
                   ) : itemMovements.length > 0 ? (
-                    itemMovements.map((movement) => (
-                      <TableRow key={movement.id}>
-                        <TableCell>{format(parseISO(movement.date), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className={cn('font-normal', getBadgeVariant(movement.type))}>
-                              {movement.type}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right font-medium">{movement.quantity}</TableCell>
-                        <TableCell>
-                            {movement.responsible.includes("Operador:") ? (
-                              <div className="flex flex-col">
-                                <span className="font-medium">
-                                  {movement.responsible.split(" Operador:")[1]}
-                                </span>
-                                <span className="text-muted-foreground text-xs">
-                                  {movement.responsible.split(" Operador:")[0]}
-                                </span>
-                              </div>
-                            ) : (
-                              <span>{movement.responsible}</span>
-                            )}
-                        </TableCell>
-                      </TableRow>
-                    ))
+                    itemMovements.map((movement) => {
+                        const expirationStatus = movement.expirationDate ? getExpirationStatus(movement.expirationDate) : null;
+                        return (
+                          <TableRow key={movement.id} className={getTableRowClass(expirationStatus)}>
+                            <TableCell>{format(parseISO(movement.date), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className={cn('font-normal', getBadgeVariant(movement.type))}>
+                                  {movement.type}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                                {movement.expirationDate ? format(parseISO(movement.expirationDate), "dd/MM/yyyy") : 'N/A'}
+                            </TableCell>
+                            <TableCell className="text-right font-medium">{movement.quantity}</TableCell>
+                            <TableCell>
+                                {movement.responsible.includes("Operador:") ? (
+                                  <div className="flex flex-col">
+                                    <span className="font-medium">
+                                      {movement.responsible.split(" Operador:")[1]}
+                                    </span>
+                                    <span className="text-muted-foreground text-xs">
+                                      {movement.responsible.split(" Operador:")[0]}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span>{movement.responsible}</span>
+                                )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                    })
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={4} className="text-center text-muted-foreground">Nenhuma movimentação encontrada para este item.</TableCell>
+                      <TableCell colSpan={5} className="text-center text-muted-foreground">Nenhuma movimentação encontrada para este item.</TableCell>
                     </TableRow>
                   )}
                 </TableBody>

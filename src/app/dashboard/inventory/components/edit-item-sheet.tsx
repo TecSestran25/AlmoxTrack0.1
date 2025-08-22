@@ -4,8 +4,10 @@ import * as React from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Upload } from "lucide-react";
+import { Upload, Calendar as CalendarIcon } from "lucide-react";
 import Image from "next/image";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -34,6 +36,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
 
 
 const formSchema = z.object({
@@ -48,6 +53,7 @@ const formSchema = z.object({
   otherCategory: z.string().optional(),
   image: z.any().optional(),
   isPerishable: z.enum(["Não", "Sim"]).optional(),
+  expirationDate: z.string().optional(),
 }).refine(data => {
   if (data.category === 'Outro') {
     return data.otherCategory && data.otherCategory.length > 0;
@@ -64,6 +70,14 @@ const formSchema = z.object({
 }, {
   message: "Este campo é obrigatório para materiais de consumo.",
   path: ["isPerishable"],
+}).refine(data => {
+  if (data.isPerishable === 'Sim') {
+    return data.expirationDate && data.expirationDate.length > 0;
+  }
+  return true;
+}, {
+  message: "A data de validade é obrigatória para itens perecíveis.",
+  path: ["expirationDate"],
 });
 
 
@@ -101,6 +115,7 @@ export function EditItemSheet({ isOpen, onOpenChange, onItemUpdated, item }: Edi
         category: isStandardCategory ? item.category : 'Outro',
         otherCategory: isStandardCategory ? '' : item.category,
         isPerishable: item.isPerishable ? 'Sim' : 'Não',
+        expirationDate: item.expirationDate || '',
         image: null,
       });
       setImagePreview(item.image);
@@ -109,12 +124,14 @@ export function EditItemSheet({ isOpen, onOpenChange, onItemUpdated, item }: Edi
 
   const categoryValue = form.watch("category");
   const materialType = form.watch("materialType");
+  const isPerishable = form.watch("isPerishable");
 
   React.useEffect(() => {
     if (materialType === "consumo") {
       form.setValue("patrimony", "");
     } else if (materialType === "permanente") {
       form.setValue("isPerishable", "Não");
+      form.setValue("expirationDate", "");
     }
   }, [materialType, form]);
   
@@ -161,7 +178,7 @@ export function EditItemSheet({ isOpen, onOpenChange, onItemUpdated, item }: Edi
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 py-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-
+              {/* Imagem do produto no lado esquerdo */}
               <div className="md:col-span-1 space-y-2">
                 <FormLabel>Imagem do Produto</FormLabel>
                 <div 
@@ -192,6 +209,7 @@ export function EditItemSheet({ isOpen, onOpenChange, onItemUpdated, item }: Edi
                 </div>
               </div>
 
+              {/* Campos principais (Código e Nome) no lado direito */}
               <div className="md:col-span-2 space-y-4">
                 <FormField
                   control={form.control}
@@ -225,7 +243,8 @@ export function EditItemSheet({ isOpen, onOpenChange, onItemUpdated, item }: Edi
                 />
               </div>
             </div>
-
+            
+            {/* Nova seção para os campos restantes, abaixo da primeira linha */}
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormField
@@ -292,6 +311,43 @@ export function EditItemSheet({ isOpen, onOpenChange, onItemUpdated, item }: Edi
                   />
                 )}
               </div>
+
+              {isPerishable === "Sim" && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <FormField
+                    control={form.control}
+                    name="expirationDate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Data de Validade</FormLabel>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button
+                                variant={"outline"}
+                                className={cn("w-full justify-start text-left font-normal", !field.value && "text-muted-foreground")}
+                              >
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {field.value ? format(new Date(field.value), "dd/MM/yyyy", { locale: ptBR }) : <span>Selecione a data de validade</span>}
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={field.value ? new Date(field.value) : undefined}
+                              onSelect={(date) => field.onChange(date ? date.toISOString() : "")}
+                              initialFocus
+                              locale={ptBR}
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              )}
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormField
@@ -364,6 +420,7 @@ export function EditItemSheet({ isOpen, onOpenChange, onItemUpdated, item }: Edi
                   />
                 )}
               </div>
+              
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormField
                   control={form.control}

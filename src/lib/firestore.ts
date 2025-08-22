@@ -32,10 +32,11 @@ export type Movement = {
     invoice?: string;
     productType?: 'consumo' | 'permanente';
     changes?: string;
+    expirationDate?: string;
 };
 
 type EntryData = {
-    items: { id: string; quantity: number }[];
+    items: { id: string; quantity: number; expirationDate?: string; }[];
     date: string;
     supplier: string;
     invoice?: string;
@@ -61,11 +62,11 @@ type ReturnData = {
 }
 
 type MovementFilters = {
-  startDate?: string;
-  endDate?: string;
-  movementType?: string;
-  materialType?: string;
-  department?: string;
+    startDate?: string;
+    endDate?: string;
+    movementType?: string;
+    materialType?: string;
+    department?: string;
 };
 
 type ProductFilters = {
@@ -77,17 +78,17 @@ const productsCollection = collection(db, 'products');
 const movementsCollection = collection(db, 'movements');
 
 export const getUserRole = async (uid: string): Promise<string | null> => {
-  try {
-    const userDocRef = doc(db, "users", uid);
-    const userDoc = await getDoc(userDocRef);
-    if (userDoc.exists()) {
-      return userDoc.data().role || null;
+    try {
+      const userDocRef = doc(db, "users", uid);
+      const userDoc = await getDoc(userDocRef);
+      if (userDoc.exists()) {
+        return userDoc.data().role || null;
+      }
+      return null;
+    } catch (error) {
+      console.error("Erro ao buscar a função do utilizador:", error);
+      return null;
     }
-    return null;
-  } catch (error) {
-    console.error("Erro ao buscar a função do utilizador:", error);
-    return null;
-  }
 };
 
 export const getProducts = async (filters: ProductFilters = {}): Promise<Product[]> => {
@@ -144,47 +145,47 @@ export const deleteProduct = async (productId: string): Promise<void> => {
 };
 
 type ImageObject = {
-  base64: string;
-  fileName: string;
-  contentType: string;
+    base64: string;
+    fileName: string;
+    contentType: string;
 };
 
 export const uploadImage = async (imageObject: ImageObject) => {
-  if (!imageObject || !imageObject.base64) {
-    return "https://placehold.co/40x40.png";
-  }
-  try {
-    const { base64, fileName, contentType } = imageObject;
-    const storage = getStorage();
-    const storageRef = ref(storage, `products/${Date.now()}_${fileName}`);
-    const metadata = { contentType: contentType };
-    const snapshot = await uploadString(storageRef, base64, 'data_url', metadata);
-    const downloadURL = await getDownloadURL(snapshot.ref);
-    return downloadURL;
-  } catch (error) {
-    console.error("Erro ao fazer upload da imagem com Base64:", error);
-    throw error;
-  }
+    if (!imageObject || !imageObject.base64) {
+      return "https://placehold.co/40x40.png";
+    }
+    try {
+      const { base64, fileName, contentType } = imageObject;
+      const storage = getStorage();
+      const storageRef = ref(storage, `products/${Date.now()}_${fileName}`);
+      const metadata = { contentType: contentType };
+      const snapshot = await uploadString(storageRef, base64, 'data_url', metadata);
+      const downloadURL = await getDownloadURL(snapshot.ref);
+      return downloadURL;
+    } catch (error) {
+      console.error("Erro ao fazer upload da imagem com Base64:", error);
+      throw error;
+    }
 };
 
 export const generateNextItemCode = async (prefix: string): Promise<string> => {
-  const q = query(
-    productsCollection,
-    where('code', '>=', prefix),
-    where('code', '<=', prefix + '\uf8ff'),
-    orderBy('code', 'desc'),
-    limit(1)
-  );
-  const querySnapshot = await getDocs(q);
-  if (querySnapshot.empty) {
-    return `${prefix}-001`;
-  } else {
-    const lastCode = querySnapshot.docs[0].data().code;
-    const lastNumber = parseInt(lastCode.split('-').pop() || '0', 10);
-    const nextNumber = lastNumber + 1;
-    const formattedNextNumber = nextNumber.toString().padStart(3, '0');
-    return `${prefix}-${formattedNextNumber}`;
-  }
+    const q = query(
+      productsCollection,
+      where('code', '>=', prefix),
+      where('code', '<=', prefix + '\uf8ff'),
+      orderBy('code', 'desc'),
+      limit(1)
+    );
+    const querySnapshot = await getDocs(q);
+    if (querySnapshot.empty) {
+      return `${prefix}-001`;
+    } else {
+      const lastCode = querySnapshot.docs[0].data().code;
+      const lastNumber = parseInt(lastCode.split('-').pop() || '0', 10);
+      const nextNumber = lastNumber + 1;
+      const formattedNextNumber = nextNumber.toString().padStart(3, '0');
+      return `${prefix}-${formattedNextNumber}`;
+    }
 };
 
 export const finalizeEntry = async (entryData: EntryData): Promise<void> => {
@@ -197,8 +198,19 @@ export const finalizeEntry = async (entryData: EntryData): Promise<void> => {
                 if (!productDoc.exists()) {
                     throw new Error(`Produto com ID ${item.id} não encontrado.`);
                 }
-                
-                transaction.update(productRef, { quantity: increment(item.quantity) });
+
+                const productUpdateData: { quantity: any; expirationDate?: string; } = {
+                    quantity: increment(item.quantity)
+                };
+
+                if (productDoc.data().isPerishable === 'Sim' && item.expirationDate) {
+                    const currentExpirationDate = productDoc.data().expirationDate;
+                    if (!currentExpirationDate || new Date(item.expirationDate) < new Date(currentExpirationDate)) {
+                        productUpdateData.expirationDate = item.expirationDate;
+                    }
+                }
+
+                transaction.update(productRef, productUpdateData);
 
                 const movementData: Omit<Movement, 'id'> = {
                     productId: item.id,
@@ -209,6 +221,7 @@ export const finalizeEntry = async (entryData: EntryData): Promise<void> => {
                     supplier: entryData.supplier,
                     entryType: entryData.entryType,
                     productType: productDoc.data().type,
+                    expirationDate: item.expirationDate,
                 };
 
                 if (entryData.invoice) {
@@ -263,7 +276,7 @@ export const finalizeExit = async (exitData: ExitData): Promise<void> => {
 };
 
 export const finalizeReturn = async (returnData: ReturnData): Promise<void> => {
-     try {
+      try {
         await runTransaction(db, async (transaction) => {
             for (const item of returnData.items) {
                 const productRef = doc(db, "products", item.id);
