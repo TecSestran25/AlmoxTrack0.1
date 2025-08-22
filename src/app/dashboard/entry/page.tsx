@@ -283,6 +283,10 @@ export default function EntryPage() {
                                 </SelectContent>
                             </Select>
                         </div>
+                        <div className="space-y-2">
+                            <label htmlFor="responsible" className="text-sm font-medium">Responsável</label>
+                            <Input id="responsible" value={responsible} onChange={e => setResponsible(e.target.value)} />
+                        </div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -299,11 +303,6 @@ export default function EntryPage() {
                                 <Input id="invoice" value={invoice} onChange={e => setInvoice(e.target.value)} />
                             </div>
                         )}
-
-                        <div className="space-y-2">
-                            <label htmlFor="responsible" className="text-sm font-medium">Responsável pelo Recebimento</label>
-                            <Input id="responsible" value={responsible} onChange={e => setResponsible(e.target.value)} />
-                        </div>
                     </div>
                 
                     <Card>
