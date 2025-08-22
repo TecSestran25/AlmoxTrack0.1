@@ -50,10 +50,7 @@ export default function InventoryPage() {
 
   const [isReauthOpen, setIsReauthOpen] = React.useState(false);
   const [itemPendingDeletion, setItemPendingDeletion] = React.useState<Product | null>(null);
-   const [actionToConfirm, setActionToConfirm] = React.useState<(() => void) | null>(null);
-   const [deleteConfirmationText, setDeleteConfirmationText] = React.useState("");
-
-
+  const [actionToConfirm, setActionToConfirm] = React.useState<(() => void) | null>(null);
 
   const fetchProducts = React.useCallback(async (term: string) => {
     setIsLoading(true);
@@ -61,7 +58,7 @@ export default function InventoryPage() {
       const productsFromDb = await getProducts({ searchTerm: term });
       setProducts(productsFromDb);
     } catch (error) {
-       toast({
+        toast({
         title: "Erro ao Carregar Produtos",
         description: "Não foi possível buscar os produtos do banco de dados.",
         variant: "destructive",
@@ -93,6 +90,8 @@ const handleAddItem = React.useCallback(async (newItemData: {
   patrimony?: string;
   reference?: string;
   otherCategory?: string;
+  isPerishable?: 'Não' | 'Sim';
+  expirationDate?: string;
 }) => {
   setIsLoading(true);
   try {
@@ -122,7 +121,8 @@ const handleAddItem = React.useCallback(async (newItemData: {
       unit: newItemData.unit,
       category: finalCategory || '',
       image: imageUrl,
-      reference: newItemData.reference || ''
+      reference: newItemData.reference || '',
+      isPerishable: newItemData.isPerishable,
     };
 
     const newProductId = await addProduct(newProduct);
@@ -177,7 +177,12 @@ const handleUpdateItem = async (updatedItemData: any) => {
         category: finalCategory,
         reference: updatedItemData.reference,
         image: imageUrl,
+        isPerishable: updatedItemData.isPerishable,
     };
+
+    if (updatedItemData.expirationDate) {
+      updateData.expirationDate = updatedItemData.expirationDate;
+    }
     
       const changes = [];
       if (selectedItem.name !== updateData.name) changes.push(`Nome: de '${selectedItem.name}' para '${updateData.name}'`);
@@ -188,6 +193,8 @@ const handleUpdateItem = async (updatedItemData: any) => {
       if (selectedItem.category !== updateData.category) changes.push(`Categoria: de '${selectedItem.category}' para '${updateData.category}'`);
       if (selectedItem.reference !== updateData.reference) changes.push(`Referência: de '${selectedItem.reference || "N/A"}' para '${updateData.reference || "N/A"}'`);
       if (imageUrl !== selectedItem.image) changes.push('Imagem foi alterada.');
+      if (selectedItem.isPerishable !== updateData.isPerishable) changes.push(`Perecível: de '${selectedItem.isPerishable}' para '${updateData.isPerishable}'`);
+      if (selectedItem.expirationDate !== updateData.expirationDate) changes.push(`Validade: de '${selectedItem.expirationDate || "N/A"}' para '${updateData.expirationDate || "N/A"}'`);
 
       if (changes.length > 0) {
         await addMovement({
@@ -212,9 +219,9 @@ const handleUpdateItem = async (updatedItemData: any) => {
   } 
   catch(error: any) {
    toast({
-      title: "Erro ao Atualizar Item",
-      description: "Não foi possível atualizar o item. Tente novamente.",
-      variant: "destructive"
+     title: "Erro ao Atualizar Item",
+     description: "Não foi possível atualizar o item. Tente novamente.",
+     variant: "destructive"
    });
   } finally {
    setIsLoading(false);
@@ -360,24 +367,24 @@ const handleUpdateItem = async (updatedItemData: any) => {
                                     setIsEditSheetOpen(true);
                                   });
                                   setIsReauthOpen(true);
-                                }}>
-                                  <Edit className="mr-2 h-4 w-4" />
-                                  <span>Editar Item</span>
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem 
-                                  className="text-red-600" 
-                                    onClick={() => {
-                                    setActionToConfirm(() => () => handleDeleteItem(product.id));
-                                    setIsReauthOpen(true);
-                                  }}
-                                >
-                                  <Trash2 className="mr-2 h-4 w-4" />
-                                  <span>Excluir</span>
-                                </DropdownMenuItem>
+                                  }}>
+                                    <Edit className="mr-2 h-4 w-4" />
+                                    <span>Editar Item</span>
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem 
+                                    className="text-red-600" 
+                                     onClick={() => {
+                                     setActionToConfirm(() => () => handleDeleteItem(product.id));
+                                     setIsReauthOpen(true);
+                                   }}
+                                  >
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    <span>Excluir</span>
+                                  </DropdownMenuItem>
                                 </>
                               )}
-                              </DropdownMenuContent>
+                            </DropdownMenuContent>
                           </DropdownMenu>
                         </TableCell>
                       </TableRow>
@@ -413,15 +420,6 @@ const handleUpdateItem = async (updatedItemData: any) => {
           item={selectedItem}
         />
       )}
-      {/* Diálogo para pedir a palavra-passe */}
-      <ReauthDialog
-        isOpen={isReauthOpen}
-        onOpenChange={setIsReauthOpen}
-        onSuccess={handleReauthSuccess}
-      />
-      
-      {/* Diálogo para confirmar digitando o nome (só abre após a reautenticação) */}
-        {/* Diálogo para pedir a palavra-passe */}
       <ReauthDialog
         isOpen={isReauthOpen}
         onOpenChange={setIsReauthOpen}
