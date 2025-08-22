@@ -49,6 +49,8 @@ const formSchema = z.object({
     contentType: z.string(),
   }).optional(),
   reference: z.string().min(1, "A referência é obrigatória."),
+  expirationDate: z.string().optional(),
+  isPerishable: z.enum(["Não", "Sim"]).optional(),
 }).refine(data => {
   if (data.category === 'Outro') {
     return data.otherCategory && data.otherCategory.length > 0;
@@ -57,6 +59,14 @@ const formSchema = z.object({
 }, {
   message: "Por favor, especifique a categoria.",
   path: ["otherCategory"],
+}).refine(data => {
+  if (data.materialType === 'consumo') {
+    return data.isPerishable !== undefined;
+  }
+  return true;
+}, {
+  message: "Este campo é obrigatório para materiais de consumo.",
+  path: ["isPerishable"],
 });
 
 type AddItemFormValues = z.infer<typeof formSchema>;
@@ -84,13 +94,19 @@ export function AddItemSheet({ isOpen, onOpenChange, onItemAdded }: AddItemSheet
       category: "",
       image: undefined,
       reference: "",
+      expirationDate: "",
+      isPerishable: "Não",
     },
   });
   const categoryValue = form.watch("category");
   const materialType = form.watch("materialType");
 
+
   useEffect(() => {
-    if (materialType === "consumo") {
+    if (materialType === "permanente") {
+      form.setValue("isPerishable", "Não");
+      form.setValue("expirationDate", ""); 
+    } else if (materialType === "consumo") {
       form.setValue("patrimony", "");
     }
   }, [materialType, form]);
@@ -103,24 +119,24 @@ export function AddItemSheet({ isOpen, onOpenChange, onItemAdded }: AddItemSheet
   }, [isOpen, form]);
 
   const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-  const file = event.target.files?.[0];
-  if (file) {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64String = reader.result as string;
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result as string;
 
-      const imageObject = {
-        base64: base64String,
-        fileName: file.name,
-        contentType: file.type,
+        const imageObject = {
+          base64: base64String,
+          fileName: file.name,
+          contentType: file.type,
+        };
+
+        setImagePreview(base64String);
+        form.setValue("image", imageObject);
       };
-
-      setImagePreview(base64String);
-      form.setValue("image", imageObject);
-    };
-    reader.readAsDataURL(file);
-  }
-};
+      reader.readAsDataURL(file);
+    }
+  };
 
   const onSubmit = (data: AddItemFormValues) => {
     onItemAdded(data);
@@ -139,6 +155,7 @@ export function AddItemSheet({ isOpen, onOpenChange, onItemAdded }: AddItemSheet
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 py-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+
               <div className="md:col-span-1 space-y-2">
                 <FormLabel>Imagem do Produto</FormLabel>
                 <div
@@ -167,7 +184,43 @@ export function AddItemSheet({ isOpen, onOpenChange, onItemAdded }: AddItemSheet
                   )}
                 </div>
               </div>
+
               <div className="md:col-span-2 space-y-4">
+                <FormField
+                  control={form.control}
+                  name="itemCode"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Código do Item</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="Gerado Automaticamente" 
+                          {...field} 
+                          disabled
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nome/Descrição do Item</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Ex: Caneta Esferográfica Azul" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormField
                   control={form.control}
                   name="materialType"
@@ -189,87 +242,79 @@ export function AddItemSheet({ isOpen, onOpenChange, onItemAdded }: AddItemSheet
                     </FormItem>
                   )}
                 />
+                {materialType === "permanente" && (
+                  <FormField
+                    control={form.control}
+                    name="patrimony"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Nº Patrimonial</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="Ex: 123456"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+                {materialType === "consumo" && (
+                  <FormField
+                    control={form.control}
+                    name="isPerishable"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>É Perecível?</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="Não">Não</SelectItem>
+                            <SelectItem value="Sim">Sim</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormField
                   control={form.control}
-                  name="name"
+                  name="unit"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Nome/Descrição do Item</FormLabel>
+                      <FormLabel>Unidade</FormLabel>
                       <FormControl>
-                        <Input placeholder="Ex: Caneta Esferográfica Azul" {...field} />
+                        <Input placeholder="Ex: Un, Cx, Resma" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="initialQuantity"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Quantidade Inicial</FormLabel>
+                      <FormControl>
+                        <Input type="number" placeholder="0" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
               </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <FormField
-                control={form.control}
-                name="itemCode"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Código do Item</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="Gerado Automaticamente" 
-                        {...field} 
-                        disabled
-                       />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="patrimony"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nº Patrimonial</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="Ex: 123456"
-                        {...field}
-                        disabled={materialType === "consumo"}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <FormField
-                control={form.control}
-                name="unit"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Unidade</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Ex: Un, Cx, Resma" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="initialQuantity"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Quantidade Inicial</FormLabel>
-                    <FormControl>
-                      <Input type="number" placeholder="0" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormField
                   control={form.control}
                   name="category"
@@ -295,7 +340,6 @@ export function AddItemSheet({ isOpen, onOpenChange, onItemAdded }: AddItemSheet
                   )}
                 />
 
-                {/* Este campo só aparece se 'Outro' for selecionado */}
                 {categoryValue === 'Outro' && (
                   <FormField
                     control={form.control}
@@ -311,21 +355,25 @@ export function AddItemSheet({ isOpen, onOpenChange, onItemAdded }: AddItemSheet
                     )}
                   />
                 )}
-              </>
-              <FormField
-                control={form.control}
-                name="reference"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Referência / Localização</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Ex: Prateleira A-03, Gaveta 5" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <FormField
+                  control={form.control}
+                  name="reference"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Referência / Localização</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Ex: Prateleira A-03, Gaveta 5" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
             </div>
+
             <SheetFooter className="pt-4">
               <SheetClose asChild>
                 <Button type="button" variant="outline">
