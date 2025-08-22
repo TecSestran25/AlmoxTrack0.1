@@ -186,6 +186,10 @@ export default function ConsumptionRequestForm() {
                                     <SelectItem value="Administracao">Administração</SelectItem>
                                     <SelectItem value="Financeiro">Financeiro</SelectItem>
                                     <SelectItem value="Limpeza">Limpeza</SelectItem>
+                                    <SelectItem value="Vigilancia">Vigilância</SelectItem>
+                                    <SelectItem value="Monitoramento">Monitoramento</SelectItem>
+                                    <SelectItem value="LicitacaoEContrato">Licitação e contrato</SelectItem>
+                                    <SelectItem value="Secretario">Sala do secretário</SelectItem>
                                 </SelectContent>
                             </Select>
                     </div>
