@@ -345,7 +345,7 @@ const handleUpdateItem = async (updatedItemData: any) => {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="border rounded-md overflow-x-auto">
+            <div className="border rounded-md overflow-x-auto max-h-[70vh]">
               <Table>
                 <TableHeader>
                   <TableRow>
