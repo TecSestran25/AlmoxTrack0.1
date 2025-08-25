@@ -35,11 +35,12 @@ import { EditItemSheet } from "./components/edit-item-sheet";
 import { MovementsSheet } from "./components/movements-sheet";
 import { ReauthDialog } from "../components/reauth-dialog";
 import { useToast } from "@/hooks/use-toast";
-import type { Product } from "@/lib/firestore";
-import { getProducts, addProduct, updateProduct, deleteProduct, addMovement, uploadImage, generateNextItemCode } from "@/lib/firestore";
+import type { Product, Movement } from "@/lib/firestore";
+import { getProducts, addProduct, updateProduct, deleteProduct, addMovement, uploadImage, generateNextItemCode, getMovementsForItem } from "@/lib/firestore";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
 
 const getExpirationStatus = (expirationDate?: string): 'alert' | 'warning' | 'reminder' | null => {
   if (!expirationDate) return null;
@@ -86,7 +87,7 @@ const getTooltipText = (status: 'alert' | 'warning' | 'reminder' | null, date: s
 
 export default function InventoryPage() {
   const { user, userRole } = useAuth();
-  const [products, setProducts] = React.useState<Product[]>([]);
+  const [products, setProducts] = React.useState<(Product & { calculatedExpirationDate?: string })[]>([]);
   const [searchTerm, setSearchTerm] = React.useState("");
   const [isAddSheetOpen, setIsAddSheetOpen] = React.useState(false);
   const [isEditSheetOpen, setIsEditSheetOpen] = React.useState(false);
@@ -103,7 +104,36 @@ export default function InventoryPage() {
     setIsLoading(true);
     try {
       const productsFromDb = await getProducts({ searchTerm: term });
-      setProducts(productsFromDb);
+      
+      const productsWithAlerts = await Promise.all(productsFromDb.map(async product => {
+          if (product.isPerishable === 'Sim') {
+              const movements = await getMovementsForItem(product.id);
+              
+              const entradas = movements
+                .filter(m => m.type === 'Entrada' && m.expirationDate)
+                .sort((a, b) => parseISO(a.expirationDate!).getTime() - parseISO(b.expirationDate!).getTime());
+
+              const saidas = movements
+                .filter(m => m.type === 'Saída')
+                .reduce((sum, m) => sum + m.quantity, 0);
+
+              let remainingSaidas = saidas;
+              let earliestExpirationDate = undefined;
+              for (const entrada of entradas) {
+                if (remainingSaidas < entrada.quantity) {
+                    earliestExpirationDate = entrada.expirationDate;
+                    break;
+                }
+                remainingSaidas -= entrada.quantity;
+              }
+              
+              return { ...product, calculatedExpirationDate: earliestExpirationDate };
+          }
+          return { ...product, calculatedExpirationDate: undefined };
+      }));
+      
+      setProducts(productsWithAlerts);
+
     } catch (error) {
         toast({
         title: "Erro ao Carregar Produtos",
@@ -241,7 +271,7 @@ const handleUpdateItem = async (updatedItemData: any) => {
       if (selectedItem.reference !== updateData.reference) changes.push(`Referência: de '${selectedItem.reference || "N/A"}' para '${updateData.reference || "N/A"}'`);
       if (imageUrl !== selectedItem.image) changes.push('Imagem foi alterada.');
       if (selectedItem.isPerishable !== updateData.isPerishable) changes.push(`Perecível: de '${selectedItem.isPerishable}' para '${updateData.isPerishable}'`);
-      if (selectedItem.expirationDate !== updateData.expirationDate) changes.push(`Validade: de '${selectedItem.expirationDate || "N/A"}' para '${updateData.expirationDate || "N/A"}'`);
+      if (selectedItem.expirationDate !== updateData.expirationDate) changes.push(`Validade: de '${selectedItem.expirationDate || "N/A"}' para '${updatedItemData.expirationDate || "N/A"}'`);
 
       if (changes.length > 0) {
         await addMovement({
@@ -365,11 +395,11 @@ const handleUpdateItem = async (updatedItemData: any) => {
                     </TableRow>
                   ) : products.length > 0 ? (
                     products.map((product) => {
-                        const expirationStatus = product.isPerishable === 'Sim' && product.expirationDate ? getExpirationStatus(product.expirationDate) : null;
+                        const expirationStatus = product.isPerishable === 'Sim' && product.calculatedExpirationDate ? getExpirationStatus(product.calculatedExpirationDate) : null;
                         const alertIcon = getAlertIcon(expirationStatus);
-                        const tooltipText = getTooltipText(expirationStatus, product.expirationDate || '');
+                        const tooltipText = getTooltipText(expirationStatus, product.calculatedExpirationDate || '');
                         const patrimonyText = product.type === 'permanente' 
-                            ? (product.patrimony && product.patrimony !== 'N/A' ? product.patrimony : product.code)
+                            ? (product.patrimony && typeof product.patrimony === 'string' && product.patrimony !== 'N/A' ? product.patrimony : product.code)
                             : 'N/A';
 
                         return (

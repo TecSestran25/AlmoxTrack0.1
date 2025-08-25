@@ -45,7 +45,7 @@ type EntryData = {
 }
 
 type ExitData = {
-    items: { id: string; quantity: number }[];
+    items: { id: string; quantity: number; expirationDate?: string }[];
     date: string;
     requester: string;
     department: string;
@@ -191,14 +191,20 @@ export const generateNextItemCode = async (prefix: string): Promise<string> => {
 export const finalizeEntry = async (entryData: EntryData): Promise<void> => {
     try {
         await runTransaction(db, async (transaction) => {
-            for (const item of entryData.items) {
-                const productRef = doc(db, "products", item.id);
-                const productDoc = await transaction.get(productRef);
+            const productRefs = entryData.items.map(item => doc(db, "products", item.id));
+            const productDocs = await Promise.all(productRefs.map(ref => transaction.get(ref)));
+
+            const productUpdates = new Map();
+            const movementEntries = [];
+
+            for (let i = 0; i < entryData.items.length; i++) {
+                const item = entryData.items[i];
+                const productDoc = productDocs[i];
 
                 if (!productDoc.exists()) {
                     throw new Error(`Produto com ID ${item.id} não encontrado.`);
                 }
-
+                
                 const productUpdateData: { quantity: any; expirationDate?: string; } = {
                     quantity: increment(item.quantity)
                 };
@@ -209,8 +215,7 @@ export const finalizeEntry = async (entryData: EntryData): Promise<void> => {
                         productUpdateData.expirationDate = item.expirationDate;
                     }
                 }
-
-                transaction.update(productRef, productUpdateData);
+                productUpdates.set(productRefs[i], productUpdateData);
 
                 const movementData: Omit<Movement, 'id'> = {
                     productId: item.id,
@@ -227,9 +232,15 @@ export const finalizeEntry = async (entryData: EntryData): Promise<void> => {
                 if (entryData.invoice) {
                     movementData.invoice = entryData.invoice;
                 }
+                movementEntries.push(movementData);
+            }
 
+            for (const [ref, data] of productUpdates.entries()) {
+                transaction.update(ref, data);
+            }
+            for (const data of movementEntries) {
                 const movementRef = doc(collection(db, "movements"));
-                transaction.set(movementRef, movementData);
+                transaction.set(movementRef, data);
             }
         });
     } catch (e) {
@@ -238,12 +249,59 @@ export const finalizeEntry = async (entryData: EntryData): Promise<void> => {
     }
 };
 
+/**
+ * Recalcula e atualiza a data de validade mais próxima de um produto.
+ * @param productId O ID do produto a ser recalculado.
+ */
+const findAndSetNewExpirationDate = async (productId: string) => {
+    // Consulta para encontrar todas as entradas
+    const qEntradas = query(
+        movementsCollection,
+        where('productId', '==', productId),
+        where('type', '==', 'Entrada'),
+        orderBy('expirationDate')
+    );
+    const snapshotEntradas = await getDocs(qEntradas);
+
+    // Consulta para encontrar todas as saídas
+    const qSaidas = query(
+        movementsCollection,
+        where('productId', '==', productId),
+        where('type', '==', 'Saída'),
+    );
+    const snapshotSaidas = await getDocs(qSaidas);
+    
+    let newExpirationDate = undefined;
+    if (!snapshotEntradas.empty) {
+        const entradas = snapshotEntradas.docs.map(doc => doc.data() as Movement);
+        const totalSaidas = snapshotSaidas.docs.reduce((sum, doc) => sum + doc.data().quantity, 0);
+
+        let remainingSaidas = totalSaidas;
+        for (const entrada of entradas) {
+            if (entrada.expirationDate) {
+                if (remainingSaidas < entrada.quantity) {
+                    newExpirationDate = entrada.expirationDate;
+                    break;
+                }
+                remainingSaidas -= entrada.quantity;
+            }
+        }
+    }
+    await updateProduct(productId, { expirationDate: newExpirationDate });
+};
+
 export const finalizeExit = async (exitData: ExitData): Promise<void> => {
     try {
         await runTransaction(db, async (transaction) => {
-            for (const item of exitData.items) {
-                const productRef = doc(db, "products", item.id);
-                const productDoc = await transaction.get(productRef);
+            const productRefs = exitData.items.map(item => doc(db, "products", item.id));
+            const productDocs = await Promise.all(productRefs.map(ref => transaction.get(ref)));
+
+            const productUpdates = new Map();
+            const movementExits = [];
+
+            for (let i = 0; i < exitData.items.length; i++) {
+                const item = exitData.items[i];
+                const productDoc = productDocs[i];
 
                 if (!productDoc.exists()) {
                     throw new Error(`Produto com ID ${item.id} não encontrado.`);
@@ -254,7 +312,7 @@ export const finalizeExit = async (exitData: ExitData): Promise<void> => {
                     throw new Error(`Estoque insuficiente para ${productDoc.data().name}.`);
                 }
 
-                transaction.update(productRef, { quantity: increment(-item.quantity) });
+                productUpdates.set(productRefs[i], { quantity: increment(-item.quantity) });
 
                 const movementData: Omit<Movement, 'id'> = {
                     productId: item.id,
@@ -264,11 +322,25 @@ export const finalizeExit = async (exitData: ExitData): Promise<void> => {
                     responsible: exitData.responsible,
                     department: exitData.department,
                     productType: productDoc.data().type,
+                    expirationDate: item.expirationDate,
                 };
+                movementExits.push(movementData);
+            }
+            
+            for (const [ref, data] of productUpdates.entries()) {
+                transaction.update(ref, data);
+            }
+            for (const data of movementExits) {
                 const movementRef = doc(collection(db, "movements"));
-                transaction.set(movementRef, movementData);
+                transaction.set(movementRef, data);
             }
         });
+        
+        // Recalcula a data de validade de cada produto após a transação
+        for (const item of exitData.items) {
+            await findAndSetNewExpirationDate(item.id);
+        }
+
     } catch (e) {
         console.error("Transaction failed: ", e);
         throw e;
@@ -278,14 +350,20 @@ export const finalizeExit = async (exitData: ExitData): Promise<void> => {
 export const finalizeReturn = async (returnData: ReturnData): Promise<void> => {
       try {
         await runTransaction(db, async (transaction) => {
-            for (const item of returnData.items) {
-                const productRef = doc(db, "products", item.id);
-                const productDoc = await transaction.get(productRef);
+            const productRefs = returnData.items.map(item => doc(db, "products", item.id));
+            const productDocs = await Promise.all(productRefs.map(ref => transaction.get(ref)));
+            
+            const productUpdates = new Map();
+            const movementReturns = [];
+
+            for (let i = 0; i < returnData.items.length; i++) {
+                const item = returnData.items[i];
+                const productDoc = productDocs[i];
                  if (!productDoc.exists()) {
                     throw new Error(`Produto com ID ${item.id} não encontrado.`);
                 }
-
-                transaction.update(productRef, { quantity: increment(item.quantity) });
+                
+                productUpdates.set(productRefs[i], { quantity: increment(item.quantity) });
 
                 const movementData: Omit<Movement, 'id'> = {
                     productId: item.id,
@@ -296,10 +374,22 @@ export const finalizeReturn = async (returnData: ReturnData): Promise<void> => {
                     department: returnData.department,
                     productType: productDoc.data().type,
                 };
+                movementReturns.push(movementData);
+            }
+
+            for (const [ref, data] of productUpdates.entries()) {
+                transaction.update(ref, data);
+            }
+            for (const data of movementReturns) {
                 const movementRef = doc(collection(db, "movements"));
-                transaction.set(movementRef, movementData);
+                transaction.set(movementRef, data);
             }
         });
+        
+        for (const item of returnData.items) {
+            await findAndSetNewExpirationDate(item.id);
+        }
+
     } catch (e) {
         console.error("Transaction failed: ", e);
         throw e;

@@ -42,22 +42,29 @@ const getBadgeVariant = (type: string) => {
     }
   };
 
-const getExpirationStatus = (expirationDate: string): 'alert' | 'warning' | 'reminder' | null => {
+// A assinatura da função foi alterada para aceitar string | undefined
+const getExpirationStatus = (expirationDate: string | undefined): 'alert' | 'warning' | 'reminder' | null => {
+  if (!expirationDate) return null;
   const today = new Date();
   const expiresOn = parseISO(expirationDate);
   const monthsDifference = differenceInMonths(expiresOn, today);
 
   if (monthsDifference < 1) {
-    return 'alert';
+    return 'alert'; // Menos de 1 mês ou já vencido
   } else if (monthsDifference < 2) {
-    return 'warning';
+    return 'warning'; // Entre 1 e 2 meses
   } else if (monthsDifference < 3) {
-    return 'reminder';
+    return 'reminder'; // Entre 2 e 3 meses
   }
-  return null;
+  return null; // Mais de 3 meses, sem alerta
 };
 
-const getTableRowClass = (status: 'alert' | 'warning' | 'reminder' | null) => {
+const getTableRowClass = (status: 'alert' | 'warning' | 'reminder' | null, movementType: string) => {
+    // Não aplica o alerta se for uma saída, devolução ou auditoria
+    if (movementType !== 'Entrada') {
+      return '';
+    }
+
     switch(status) {
         case 'alert':
             return 'bg-red-50 hover:bg-red-100 dark:bg-red-950 dark:hover:bg-red-900';
@@ -96,6 +103,45 @@ export function MovementsSheet({ isOpen, onOpenChange, item }: MovementsSheetPro
     }
   }, [isOpen, item]);
 
+  const processedMovements = React.useMemo(() => {
+    if (itemMovements.length === 0) return [];
+
+    const entradas = itemMovements
+      .filter(m => m.type === 'Entrada' && m.expirationDate)
+      .sort((a, b) => parseISO(a.expirationDate!).getTime() - parseISO(b.expirationDate!).getTime());
+
+    let totalSaidas = itemMovements
+      .filter(m => m.type === 'Saída')
+      .reduce((sum, m) => sum + m.quantity, 0);
+
+    const activeEntries = new Set<string>();
+    for (const entrada of entradas) {
+      if (totalSaidas > 0) {
+        const remainingInBatch = entrada.quantity - totalSaidas;
+        if (remainingInBatch > 0) {
+          activeEntries.add(entrada.id);
+          totalSaidas = 0;
+        } else {
+          totalSaidas -= entrada.quantity;
+        }
+      } else {
+        activeEntries.add(entrada.id);
+      }
+    }
+    
+    // Agora, combine as entradas ativas com todas as outras movimentações
+    return itemMovements.map(m => {
+      const isEntrada = m.type === 'Entrada';
+      const shouldAlert = isEntrada && activeEntries.has(m.id);
+      const expirationStatus = shouldAlert ? getExpirationStatus(m.expirationDate) : null;
+      const rowClassName = getTableRowClass(expirationStatus, m.type);
+      return {
+        ...m,
+        rowClassName,
+      };
+    });
+  }, [itemMovements]);
+
   return (
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
       <SheetContent className="sm:max-w-3xl overflow-y-auto">
@@ -122,11 +168,9 @@ export function MovementsSheet({ isOpen, onOpenChange, item }: MovementsSheetPro
                      <TableRow>
                       <TableCell colSpan={5} className="text-center text-muted-foreground">Carregando...</TableCell>
                     </TableRow>
-                  ) : itemMovements.length > 0 ? (
-                    itemMovements.map((movement) => {
-                        const expirationStatus = movement.expirationDate ? getExpirationStatus(movement.expirationDate) : null;
-                        return (
-                          <TableRow key={movement.id} className={getTableRowClass(expirationStatus)}>
+                  ) : processedMovements.length > 0 ? (
+                    processedMovements.map((movement) => (
+                          <TableRow key={movement.id} className={cn(movement.rowClassName, movement.type !== 'Entrada' && 'text-gray-400 dark:text-gray-600')}>
                             <TableCell>{format(parseISO(movement.date), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</TableCell>
                             <TableCell>
                               <Badge variant="outline" className={cn('font-normal', getBadgeVariant(movement.type))}>
@@ -152,8 +196,7 @@ export function MovementsSheet({ isOpen, onOpenChange, item }: MovementsSheetPro
                                 )}
                             </TableCell>
                           </TableRow>
-                        );
-                    })
+                        ))
                   ) : (
                     <TableRow>
                       <TableCell colSpan={5} className="text-center text-muted-foreground">Nenhuma movimentação encontrada para este item.</TableCell>

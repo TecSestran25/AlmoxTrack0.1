@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Calendar as CalendarIcon, Trash2 } from "lucide-react";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 import { Button } from "@/components/ui/button";
@@ -42,11 +42,14 @@ import type { Product } from "@/lib/firestore";
 import { finalizeExit } from "@/lib/firestore";
 import { ItemSearch } from "../../components/item-search";
 
+// Tipo atualizado para incluir as informações de perecibilidade
 type RequestedItem = {
     id: string;
     name: string;
     quantity: number;
     unit: string;
+    isPerishable?: 'Sim' | 'Não';
+    expirationDate?: string;
 };
 
 export default function ConsumptionRequestForm() {
@@ -89,7 +92,14 @@ export default function ConsumptionRequestForm() {
                 }
                 return prev.map((i) => i.id === selectedItem.id ? { ...i, quantity: newQuantity } : i);
             }
-            return [...prev, { id: selectedItem.id, name: selectedItem.name, quantity, unit: selectedItem.unit }];
+            return [...prev, { 
+                id: selectedItem.id, 
+                name: selectedItem.name, 
+                quantity, 
+                unit: selectedItem.unit,
+                isPerishable: selectedItem.isPerishable, // Adicionado
+                expirationDate: selectedItem.expirationDate, // Adicionado
+            }];
         });
 
         setSelectedItem(null);
@@ -131,7 +141,7 @@ export default function ConsumptionRequestForm() {
             setPurpose("");
             setRequestedItems([]);
         } catch (error: any) {
-             toast({
+            toast({
                 title: "Erro ao Finalizar Saída",
                 description: error.message || "Não foi possível registrar a saída. Tente novamente.",
                 variant: "destructive"
@@ -174,24 +184,24 @@ export default function ConsumptionRequestForm() {
                         </div>
                     </div>
                     <div className="space-y-2">
-                            <label htmlFor="department" className="text-sm font-medium">Setor/Departamento</label>
-                            <Select onValueChange={setDepartment} value={department}>
-                                <SelectTrigger id="department">
-                                    <SelectValue placeholder="Selecione um setor" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="Transito">Trânsito</SelectItem>
-                                    <SelectItem value="Guarda">Guarda</SelectItem>
-                                    <SelectItem value="Transporte">Transporte</SelectItem>
-                                    <SelectItem value="Administracao">Administração</SelectItem>
-                                    <SelectItem value="Financeiro">Financeiro</SelectItem>
-                                    <SelectItem value="Limpeza">Limpeza</SelectItem>
-                                    <SelectItem value="Vigilancia">Vigilância</SelectItem>
-                                    <SelectItem value="Monitoramento">Monitoramento</SelectItem>
-                                    <SelectItem value="LicitacaoEContrato">Licitação e contrato</SelectItem>
-                                    <SelectItem value="Secretario">Sala do secretário</SelectItem>
-                                </SelectContent>
-                            </Select>
+                        <label htmlFor="department" className="text-sm font-medium">Setor/Departamento</label>
+                        <Select onValueChange={setDepartment} value={department}>
+                            <SelectTrigger id="department">
+                                <SelectValue placeholder="Selecione um setor" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="Transito">Trânsito</SelectItem>
+                                <SelectItem value="Guarda">Guarda</SelectItem>
+                                <SelectItem value="Transporte">Transporte</SelectItem>
+                                <SelectItem value="Administracao">Administração</SelectItem>
+                                <SelectItem value="Financeiro">Financeiro</SelectItem>
+                                <SelectItem value="Limpeza">Limpeza</SelectItem>
+                                <SelectItem value="Vigilancia">Vigilância</SelectItem>
+                                <SelectItem value="Monitoramento">Monitoramento</SelectItem>
+                                <SelectItem value="LicitacaoEContrato">Licitação e contrato</SelectItem>
+                                <SelectItem value="Secretario">Sala do secretário</SelectItem>
+                            </SelectContent>
+                        </Select>
                     </div>
                     <div className="space-y-2">
                         <label htmlFor="purpose" className="text-sm font-medium">Finalidade de Uso</label>
@@ -221,21 +231,23 @@ export default function ConsumptionRequestForm() {
                                     <TableHeader>
                                         <TableRow>
                                             <TableHead>Item</TableHead>
+                                            <TableHead>Validade</TableHead>
                                             <TableHead className="w-[100px] text-right">Qtd</TableHead>
                                             <TableHead className="w-[100px] text-center">Ação</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {requestedItems.length === 0 ? (
-                                            <TableRow>
-                                                <TableCell colSpan={3} className="text-center text-muted-foreground">
-                                                    Nenhum item solicitado.
-                                                </TableCell>
-                                            </TableRow>
-                                        ) : (
+                                         {requestedItems.length === 0 ? (
+                                             <TableRow>
+                                                 <TableCell colSpan={4} className="text-center text-muted-foreground">
+                                                     Nenhum item solicitado.
+                                                 </TableCell>
+                                             </TableRow>
+                                         ) : (
                                             requestedItems.map(item => (
                                                 <TableRow key={item.id}>
                                                     <TableCell className="font-medium">{item.name}</TableCell>
+                                                    <TableCell>{item.expirationDate ? format(parseISO(item.expirationDate), 'dd/MM/yyyy') : 'N/A'}</TableCell>
                                                     <TableCell className="text-right">{`${item.quantity} ${item.unit}`}</TableCell>
                                                     <TableCell className="text-center">
                                                         <Button variant="ghost" size="icon" className="text-red-600 hover:bg-red-100" onClick={() => handleRemoveItem(item.id)}>
@@ -244,7 +256,7 @@ export default function ConsumptionRequestForm() {
                                                     </TableCell>
                                                 </TableRow>
                                             ))
-                                        )}
+                                         )}
                                     </TableBody>
                                 </Table>
                             </div>
