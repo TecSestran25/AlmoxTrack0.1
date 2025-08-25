@@ -18,6 +18,7 @@ import {
   FileCog,
   Warehouse,
   Loader2,
+  Inbox,
 } from "lucide-react";
 import {
   SidebarProvider,
@@ -42,9 +43,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { AdminSyncAuthDialog } from "./components/admin-sync-auth-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { syncToSheet } from "@/ai/flows/sync-sheet-flow";
 import { auth } from "@/lib/firebase";
 import Image from "next/image";
 
@@ -54,7 +53,6 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { toast } = useToast();
   const { user, loading, userRole } = useAuth();
-  const [isAuthDialogOpen, setIsAuthDialogOpen] = React.useState(false);
   
   React.useEffect(() => {
     if (!loading) {
@@ -70,6 +68,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
     { href: "/dashboard/entry", icon: ArrowRightToLine, label: "Entrada" },
     { href: "/dashboard/exit", icon: ArrowLeftFromLine, label: "Saída" },
     { href: "/dashboard/returns", icon: ChevronsLeftRight, label: "Devolução" },
+    { href: "/dashboard/request", icon: Inbox, label: "Requisições" },
   ];
 
   const handleSignOut = async () => {
@@ -90,35 +89,6 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const handleSyncSuccess = async (credential: any) => {
-    toast({
-      title: "Authentication Successful!",
-      description: "Now syncing data to Google Sheets. This may take a moment...",
-    });
-
-    try {
-        const result = await syncToSheet({
-            accessToken: credential.accessToken,
-        });
-        toast({
-            title: "Sync Complete!",
-            description: (
-                <p>
-                    Data synced to a new spreadsheet.
-                    <a href={result.spreadsheetUrl} target="_blank" rel="noopener noreferrer" className="underline ml-1">
-                        Open Sheet
-                    </a>
-                </p>
-            ),
-        });
-    } catch (error: any) {
-        toast({
-            title: "Sync Failed",
-            description: error.message || "An unknown error occurred.",
-            variant: "destructive",
-        });
-    }
-  };
 
   if (loading || !user) {
     return (
@@ -236,11 +206,6 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
         </header>
         <main className="flex-1 p-4 sm:px-6 sm:py-6">{children}</main>
       </SidebarInset>
-      <AdminSyncAuthDialog
-        isOpen={isAuthDialogOpen}
-        onOpenChange={setIsAuthDialogOpen}
-        onAuthSuccess={handleSyncSuccess}
-      />
     </SidebarProvider>
   );
 }
