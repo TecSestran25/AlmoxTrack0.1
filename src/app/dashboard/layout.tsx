@@ -17,7 +17,8 @@ import {
     Loader2,
     MailPlus,
     ChartNoAxesCombined,
-    Mailbox
+    Mailbox,
+    PanelLeft
 } from "lucide-react";
 import {
     SidebarProvider,
@@ -45,7 +46,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 import { auth } from "@/lib/firebase";
 import Image from "next/image";
-
+import { cn } from "@/lib/utils";
 
 function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
@@ -99,7 +100,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
     const allowedItems = React.useMemo(() => {
         if (!userRole) return [];
         return navItems.filter(item => item.roles.includes(userRole));
-    }, [userRole]);
+    }, [navItems, userRole]);
 
     const handleSignOut = async () => {
         try {
@@ -130,7 +131,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
 
     return (
         <SidebarProvider>
-            <Sidebar>
+            <Sidebar className="hidden lg:flex lg:w-64" collapsible="offcanvas" >
                 <SidebarHeader className="mb-3 ml-5">
                     <Image 
                         src="/LOGO.png" 
@@ -202,8 +203,8 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                 </SidebarFooter>
             </Sidebar>
             <SidebarInset>
-                <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-4 border-b bg-background/80 backdrop-blur-sm px-4 sm:px-6 md:hidden">
-                    <SidebarTrigger className="sm:hidden -ml-2" />
+                <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-4 border-b bg-background/80 backdrop-blur-sm px-4 sm:px-6 lg:hidden">
+                    <SidebarTrigger className="-ml-2" />
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button
