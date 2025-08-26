@@ -39,6 +39,7 @@ export type Movement = {
     productType?: 'consumo' | 'permanente';
     changes?: string;
     expirationDate?: string;
+    requester?: string; 
 };
 
 export type RequestItem = {
@@ -356,6 +357,7 @@ export const finalizeExit = async (exitData: ExitData): Promise<void> => {
                     department: exitData.department,
                     productType: productDoc.data().type,
                     expirationDate: item.expirationDate || "",
+                    requester: exitData.requester
                 };
                 movementExits.push(movementData);
             }
