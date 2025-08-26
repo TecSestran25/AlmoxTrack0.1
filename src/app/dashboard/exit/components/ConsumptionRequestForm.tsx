@@ -7,19 +7,19 @@ import { ptBR } from "date-fns/locale";
 
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
+    Card,
+    CardContent,
+    CardHeader,
+    CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
 } from "@/components/ui/table";
 import {
     Popover,
@@ -27,11 +27,11 @@ import {
     PopoverTrigger,
 } from "@/components/ui/popover";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
 } from "@/components/ui/select";
 import { useAuth } from "@/contexts/AuthContext";
 import { Calendar } from "@/components/ui/calendar";
@@ -42,7 +42,6 @@ import type { Product } from "@/lib/firestore";
 import { finalizeExit } from "@/lib/firestore";
 import { ItemSearch } from "../../components/item-search";
 
-// Tipo atualizado para incluir as informações de perecibilidade
 type RequestedItem = {
     id: string;
     name: string;
@@ -50,6 +49,13 @@ type RequestedItem = {
     unit: string;
     isPerishable?: 'Sim' | 'Não';
     expirationDate?: string;
+};
+
+type RequestDataFromUrl = {
+    requester: string;
+    department: string;
+    purpose?: string;
+    items: RequestedItem[];
 };
 
 export default function ConsumptionRequestForm() {
@@ -64,8 +70,52 @@ export default function ConsumptionRequestForm() {
     const [selectedItem, setSelectedItem] = React.useState<Product | null>(null);
     const [isFinalizing, setIsFinalizing] = React.useState(false);
 
-    const { user } = useAuth();
+    const { user, loading: userLoading } = useAuth();
     
+    const isInitialLoad = React.useRef(true);
+
+    React.useEffect(() => {
+        if (!userLoading && isInitialLoad.current) {
+            isInitialLoad.current = false;
+            
+            const urlParams = new URLSearchParams(window.location.search);
+            const requestDataParam = urlParams.get('requestData');
+
+            if (requestDataParam) {
+                try {
+                    const decodedData = atob(requestDataParam);
+                    const parsedData: RequestDataFromUrl = JSON.parse(decodedData);
+                    
+                    const requesterMatch = parsedData.requester.match(/(.*) \((.*)\)/);
+                    if (requesterMatch) {
+                        setRequesterName(requesterMatch[1]);
+                        setRequesterId(requesterMatch[2]);
+                    } else {
+                        setRequesterName(parsedData.requester);
+                        setRequesterId('');
+                    }
+                    
+                    setDepartment(parsedData.department);
+                    setPurpose(parsedData.purpose || '');
+                    setRequestedItems(parsedData.items);
+                    
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                } catch (error) {
+                    console.error("Erro ao decodificar dados da URL:", error);
+                    toast({
+                        title: "Erro",
+                        description: "Não foi possível carregar os dados da requisição.",
+                        variant: "destructive",
+                    });
+                }
+            } else if (user) {
+                setRequesterName("");
+                setRequesterId("");
+                setDepartment("");
+            }
+        }
+    }, [toast, user, userLoading]);
+
     const handleAddItem = () => {
         if (!selectedItem) {
             toast({ title: "Erro", description: "Por favor, busque e selecione um item.", variant: "destructive" });
@@ -92,13 +142,13 @@ export default function ConsumptionRequestForm() {
                 }
                 return prev.map((i) => i.id === selectedItem.id ? { ...i, quantity: newQuantity } : i);
             }
-            return [...prev, { 
-                id: selectedItem.id, 
-                name: selectedItem.name, 
-                quantity, 
+            return [...prev, {
+                id: selectedItem.id,
+                name: selectedItem.name,
+                quantity,
                 unit: selectedItem.unit,
-                isPerishable: selectedItem.isPerishable, // Adicionado
-                expirationDate: selectedItem.expirationDate, // Adicionado
+                isPerishable: selectedItem.isPerishable,
+                expirationDate: selectedItem.expirationDate,
             }];
         });
 
@@ -196,6 +246,7 @@ export default function ConsumptionRequestForm() {
                                 <SelectItem value="Administracao">Administração</SelectItem>
                                 <SelectItem value="Financeiro">Financeiro</SelectItem>
                                 <SelectItem value="Limpeza">Limpeza</SelectItem>
+                                <SelectItem value="Tecnologia">T.I</SelectItem>
                                 <SelectItem value="Vigilancia">Vigilância</SelectItem>
                                 <SelectItem value="Monitoramento">Monitoramento</SelectItem>
                                 <SelectItem value="LicitacaoEContrato">Licitação e contrato</SelectItem>
@@ -212,14 +263,14 @@ export default function ConsumptionRequestForm() {
                         <CardHeader>
                             <CardTitle>Itens Solicitados</CardTitle>
                             <div className="flex flex-col md:flex-row items-end gap-2 pt-4">
-                               <ItemSearch onSelectItem={setSelectedItem} materialType="consumo" placeholder="Buscar item de consumo..." searchId="consumption-search" />
+                                <ItemSearch onSelectItem={setSelectedItem} placeholder="Buscar item disponível..." searchId="consumption-search" />
                                 <div className="w-full md:w-24">
                                     <label htmlFor="quantity-consumption" className="text-sm font-medium">Qtd.</label>
                                     <Input id="quantity-consumption" type="number" value={quantity} onChange={e => setQuantity(Number(e.target.value))} min="1" />
                                 </div>
                                 <Button onClick={handleAddItem} className="w-full md:w-auto">Adicionar</Button>
                             </div>
-                             {selectedItem && (
+                            {selectedItem && (
                                 <div className="mt-2 p-2 bg-muted rounded-md text-sm">
                                     Item selecionado: <span className="font-medium">{selectedItem.name}</span> (Disponível: {selectedItem.quantity})
                                 </div>
