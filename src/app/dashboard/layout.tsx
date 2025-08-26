@@ -99,7 +99,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
     const allowedItems = React.useMemo(() => {
         if (!userRole) return [];
         return navItems.filter(item => item.roles.includes(userRole));
-    }, [navItems, userRole]);
+    }, [userRole]);
 
     const handleSignOut = async () => {
         try {
