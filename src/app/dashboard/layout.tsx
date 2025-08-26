@@ -5,6 +5,7 @@ import * as React from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { signOut, User } from "firebase/auth";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { MonitorSmartphone, Moon, Sun } from "lucide-react"
 import {
     CircleUser,
     LogOut,
@@ -39,12 +40,17 @@ import {
     DropdownMenuLabel,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
+    DropdownMenuSub,
+    DropdownMenuSubTrigger,
+    DropdownMenuSubContent,
+    DropdownMenuPortal,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 import { auth } from "@/lib/firebase";
 import Image from "next/image";
+import { useTheme } from "next-themes";
 
 
 function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
@@ -119,6 +125,8 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
         }
     };
 
+    const { setTheme } = useTheme()
+
 
     if (loading || !user || !isVerificationComplete) {
         return (
@@ -188,10 +196,29 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                         <DropdownMenuContent align="end" className="w-56">
                             <DropdownMenuLabel>Minha Conta</DropdownMenuLabel>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem>
-                            <Settings className="mr-2 h-4 w-4" />
-                            Configurações
-                            </DropdownMenuItem>
+                            <DropdownMenuSub>
+                                <DropdownMenuSubTrigger>
+                                    <Sun className="mr-2 h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+                                    <Moon className="absolute mr-2 h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+                                    <span>Tema</span>
+                                </DropdownMenuSubTrigger>
+                                <DropdownMenuPortal>
+                                    <DropdownMenuSubContent>
+                                        <DropdownMenuItem onClick={() => setTheme("light")}>
+                                            <Sun className="mr-2 h-4 w-4" />
+                                            <span>Claro</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => setTheme("dark")}>
+                                            <Moon className="mr-2 h-4 w-4" />
+                                            <span>Escuro</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => setTheme("system")}>
+                                            <MonitorSmartphone className="mr-2 h-4 w-4" />
+                                            <span>Sistema</span>
+                                        </DropdownMenuItem>
+                                    </DropdownMenuSubContent>
+                                </DropdownMenuPortal>
+                            </DropdownMenuSub>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={handleSignOut}>
                             <LogOut className="mr-2 h-4 w-4" />
@@ -217,10 +244,29 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                         <DropdownMenuContent align="end">
                             <DropdownMenuLabel>{userRole}</DropdownMenuLabel>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem>
-                            <Settings className="mr-2 h-4 w-4" />
-                            Configurações
-                            </DropdownMenuItem>
+                            <DropdownMenuSub>
+                                <DropdownMenuSubTrigger>
+                                    <Sun className="mr-2 h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+                                    <Moon className="absolute mr-2 h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+                                    <span>Tema</span>
+                                </DropdownMenuSubTrigger>
+                                <DropdownMenuPortal>
+                                    <DropdownMenuSubContent>
+                                        <DropdownMenuItem onClick={() => setTheme("light")}>
+                                            <Sun className="mr-2 h-4 w-4" />
+                                            <span>Claro</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => setTheme("dark")}>
+                                            <Moon className="mr-2 h-4 w-4" />
+                                            <span>Escuro</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => setTheme("system")}>
+                                            <MonitorSmartphone className="mr-2 h-4 w-4" />
+                                            <span>Sistema</span>
+                                        </DropdownMenuItem>
+                                    </DropdownMenuSubContent>
+                                </DropdownMenuPortal>
+                            </DropdownMenuSub>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={handleSignOut}>
                             <LogOut className="mr-2 h-4 w-4" />
