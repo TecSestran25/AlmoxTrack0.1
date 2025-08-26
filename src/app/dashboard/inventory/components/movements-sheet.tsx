@@ -82,6 +82,14 @@ interface MovementsSheetProps {
   item: any; 
 }
 
+const extractRequesterInfo = (requesterString: string) => {
+  const match = requesterString.match(/(.*)\s\((.*)\)/);
+  if (match) {
+    return { name: match[1], id: match[2] };
+  }
+  return { name: requesterString, id: '' };
+};
+
 export function MovementsSheet({ isOpen, onOpenChange, item }: MovementsSheetProps) {
   const [itemMovements, setItemMovements] = React.useState<Movement[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
@@ -180,7 +188,21 @@ export function MovementsSheet({ isOpen, onOpenChange, item }: MovementsSheetPro
                             </TableCell>
                             <TableCell className="text-right font-medium">{movement.quantity}</TableCell>
                             <TableCell>
-                                {movement.responsible.includes("Operador:") ? (
+                                {movement.type === 'Saída' && movement.requester ? (
+                                  <div className="flex flex-col">
+                                    <span className="font-medium">
+                                      {movement.responsible}
+                                    </span>
+                                    <div className="flex flex-col">
+                                      <span className="text-muted-foreground text-xs">
+                                        Solicitante: {extractRequesterInfo(movement.requester).name}
+                                      </span>
+                                      <span className="text-muted-foreground text-xs">
+                                        Matrícula: {extractRequesterInfo(movement.requester).id}
+                                      </span>
+                                    </div>
+                                  </div>
+                                ) : movement.responsible.includes("Operador:") ? (
                                   <div className="flex flex-col">
                                     <span className="font-medium">
                                       {movement.responsible.split(" Operador:")[1]}
