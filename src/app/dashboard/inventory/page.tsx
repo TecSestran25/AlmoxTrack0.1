@@ -447,12 +447,16 @@ const handleUpdateItem = async (updatedItemData: any) => {
                             </TableCell>
                             <TableCell className="text-center">
                               <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button aria-haspopup="true" size="icon" variant="ghost">
-                                    <MoreHorizontal className="h-4 w-4" />
-                                    <span className="sr-only">Toggle menu</span>
-                                  </Button>
-                                </DropdownMenuTrigger>
+                                  { (userRole === 'Admin' || userRole === 'Operador') && (
+                                    <>
+                                      <DropdownMenuTrigger asChild>
+                                        <Button aria-haspopup="true" size="icon" variant="ghost">
+                                          <MoreHorizontal className="h-4 w-4" />
+                                          <span className="sr-only">Toggle menu</span>
+                                        </Button>
+                                      </DropdownMenuTrigger>
+                                    </>
+                                  )}
                                 <DropdownMenuContent align="end">
                                   <DropdownMenuItem onClick={() => handleMovementsClick(product)}>
                                     <History className="mr-2 h-4 w-4" />
