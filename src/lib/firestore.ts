@@ -1,7 +1,13 @@
 import { db } from './firebase';
-import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, where, runTransaction, increment, QueryConstraint, orderBy, limit, getDoc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, where, runTransaction, increment, QueryConstraint, orderBy, limit, getDoc, setDoc } from 'firebase/firestore';
 import { getStorage, ref, uploadString, getDownloadURL } from "firebase/storage";
 import { parseISO } from 'date-fns';
+
+export interface UserData {
+    name?: string;
+    id?: string;
+    department?: string;
+}
 
 export type Product = {
     id: string;
@@ -35,6 +41,27 @@ export type Movement = {
     expirationDate?: string;
 };
 
+export type RequestItem = {
+    id: string;
+    name: string;
+    quantity: number;
+    unit: string;
+    isPerishable?: 'Sim' | 'Não';
+    expirationDate?: string;
+};
+
+export type RequestData = {
+    id: string;
+    items: RequestItem[];
+    date: string;
+    requester: string;
+    department: string;
+    purpose?: string;
+    status: 'pending' | 'approved' | 'rejected';
+    requestedByUid: string;
+};
+
+
 type EntryData = {
     items: { id: string; quantity: number; expirationDate?: string; }[];
     date: string;
@@ -51,6 +78,7 @@ type ExitData = {
     department: string;
     purpose?: string;
     responsible: string;
+    expirationDate?: string;
 }
 
 type ReturnData = {
@@ -76,6 +104,21 @@ type ProductFilters = {
 
 const productsCollection = collection(db, 'products');
 const movementsCollection = collection(db, 'movements');
+const requestsCollection = collection(db, 'requests');
+
+export const getUserData = async (uid: string): Promise<UserData | null> => {
+    try {
+        const userDocRef = doc(db, "users", uid);
+        const userDoc = await getDoc(userDocRef);
+        if (userDoc.exists()) {
+            return userDoc.data() as UserData;
+        }
+        return null;
+    } catch (error) {
+        console.error("Erro ao buscar dados do usuário:", error);
+        return null;
+    }
+};
 
 export const getUserRole = async (uid: string): Promise<string | null> => {
     try {
@@ -144,7 +187,7 @@ export const deleteProduct = async (productId: string): Promise<void> => {
     await deleteDoc(productDoc);
 };
 
-type ImageObject = {
+export type ImageObject = {
     base64: string;
     fileName: string;
     contentType: string;
@@ -226,7 +269,7 @@ export const finalizeEntry = async (entryData: EntryData): Promise<void> => {
                     supplier: entryData.supplier,
                     entryType: entryData.entryType,
                     productType: productDoc.data().type,
-                    expirationDate: item.expirationDate,
+                    expirationDate: item.expirationDate || "",
                 };
 
                 if (entryData.invoice) {
@@ -249,45 +292,35 @@ export const finalizeEntry = async (entryData: EntryData): Promise<void> => {
     }
 };
 
-/**
- * Recalcula e atualiza a data de validade mais próxima de um produto.
- * @param productId O ID do produto a ser recalculado.
- */
 const findAndSetNewExpirationDate = async (productId: string) => {
-    // Consulta para encontrar todas as entradas
-    const qEntradas = query(
+    const q = query(
         movementsCollection,
-        where('productId', '==', productId),
-        where('type', '==', 'Entrada'),
-        orderBy('expirationDate')
+        where('productId', '==', productId)
     );
-    const snapshotEntradas = await getDocs(qEntradas);
+    const snapshot = await getDocs(q);
+    const allMovements = snapshot.docs.map(doc => doc.data() as Movement);
 
-    // Consulta para encontrar todas as saídas
-    const qSaidas = query(
-        movementsCollection,
-        where('productId', '==', productId),
-        where('type', '==', 'Saída'),
-    );
-    const snapshotSaidas = await getDocs(qSaidas);
+    const entradas = allMovements
+        .filter(m => m.type === 'Entrada' && m.expirationDate)
+        .sort((a, b) => parseISO(a.expirationDate!).getTime() - parseISO(b.expirationDate!).getTime());
+
+    const totalSaidas = allMovements
+        .filter(m => m.type === 'Saída')
+        .reduce((sum, m) => sum + m.quantity, 0);
     
-    let newExpirationDate = undefined;
-    if (!snapshotEntradas.empty) {
-        const entradas = snapshotEntradas.docs.map(doc => doc.data() as Movement);
-        const totalSaidas = snapshotSaidas.docs.reduce((sum, doc) => sum + doc.data().quantity, 0);
+    let newExpirationDate = "";
+    let remainingSaidas = totalSaidas;
 
-        let remainingSaidas = totalSaidas;
-        for (const entrada of entradas) {
-            if (entrada.expirationDate) {
-                if (remainingSaidas < entrada.quantity) {
-                    newExpirationDate = entrada.expirationDate;
-                    break;
-                }
-                remainingSaidas -= entrada.quantity;
+    for (const entrada of entradas) {
+        if (entrada.expirationDate) {
+            if (remainingSaidas < entrada.quantity) {
+                newExpirationDate = entrada.expirationDate;
+                break;
             }
+            remainingSaidas -= entrada.quantity;
         }
     }
-    await updateProduct(productId, { expirationDate: newExpirationDate });
+    await updateProduct(productId, { expirationDate: newExpirationDate || "" });
 };
 
 export const finalizeExit = async (exitData: ExitData): Promise<void> => {
@@ -322,7 +355,7 @@ export const finalizeExit = async (exitData: ExitData): Promise<void> => {
                     responsible: exitData.responsible,
                     department: exitData.department,
                     productType: productDoc.data().type,
-                    expirationDate: item.expirationDate,
+                    expirationDate: item.expirationDate || "",
                 };
                 movementExits.push(movementData);
             }
@@ -336,7 +369,6 @@ export const finalizeExit = async (exitData: ExitData): Promise<void> => {
             }
         });
         
-        // Recalcula a data de validade de cada produto após a transação
         for (const item of exitData.items) {
             await findAndSetNewExpirationDate(item.id);
         }
@@ -430,5 +462,33 @@ export const getMovementsForItem = async (productId: string): Promise<Movement[]
 
 export const addMovement = async (movementData: Omit<Movement, 'id'>): Promise<string> => {
     const docRef = await addDoc(movementsCollection, movementData);
+    return docRef.id;
+};
+export const getPendingRequests = async (): Promise<RequestData[]> => {
+    const q = query(requestsCollection, where('status', '==', 'pending'), orderBy('date', 'desc'));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RequestData));
+};
+
+export const approveRequest = async (requestId: string, approvedBy: string): Promise<void> => {
+    const requestRef = doc(db, 'requests', requestId);
+    await updateDoc(requestRef, { 
+        status: 'approved', 
+        approvedBy: approvedBy,
+        approvalDate: new Date().toISOString()
+    });
+};
+
+export const rejectRequest = async (requestId: string, responsible: string): Promise<void> => {
+    const requestRef = doc(db, 'requests', requestId);
+    await updateDoc(requestRef, { 
+        status: 'rejected',
+        rejectedBy: responsible,
+        rejectionDate: new Date().toISOString()
+    });
+};
+
+export const createRequest = async (requestData: Omit<RequestData, 'id' | 'status'>): Promise<string> => {
+    const docRef = await addDoc(requestsCollection, { ...requestData, status: 'pending' });
     return docRef.id;
 };
