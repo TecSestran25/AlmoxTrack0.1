@@ -42,7 +42,6 @@ const getBadgeVariant = (type: string) => {
     }
   };
 
-// A assinatura da função foi alterada para aceitar string | undefined
 const getExpirationStatus = (expirationDate: string | undefined): 'alert' | 'warning' | 'reminder' | null => {
   if (!expirationDate) return null;
   const today = new Date();
@@ -50,17 +49,17 @@ const getExpirationStatus = (expirationDate: string | undefined): 'alert' | 'war
   const monthsDifference = differenceInMonths(expiresOn, today);
 
   if (monthsDifference < 1) {
-    return 'alert'; // Menos de 1 mês ou já vencido
+    return 'alert';
   } else if (monthsDifference < 2) {
-    return 'warning'; // Entre 1 e 2 meses
+    return 'warning';
   } else if (monthsDifference < 3) {
-    return 'reminder'; // Entre 2 e 3 meses
+    return 'reminder';
   }
-  return null; // Mais de 3 meses, sem alerta
+  return null;
 };
 
 const getTableRowClass = (status: 'alert' | 'warning' | 'reminder' | null, movementType: string) => {
-    // Não aplica o alerta se for uma saída, devolução ou auditoria
+
     if (movementType !== 'Entrada') {
       return '';
     }
@@ -128,8 +127,7 @@ export function MovementsSheet({ isOpen, onOpenChange, item }: MovementsSheetPro
         activeEntries.add(entrada.id);
       }
     }
-    
-    // Agora, combine as entradas ativas com todas as outras movimentações
+
     return itemMovements.map(m => {
       const isEntrada = m.type === 'Entrada';
       const shouldAlert = isEntrada && activeEntries.has(m.id);
