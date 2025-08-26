@@ -75,8 +75,7 @@ export default function DashboardPage() {
     setStartDate(defaultStartDate);
     setEndDate(defaultEndDate);
   }, []);
-  
-  // Função auxiliar para checar alertas de vencimento
+
   const checkExpirationAlerts = React.useCallback((productsList: Product[]) => {
     const today = new Date();
     const expiringItems = productsList.filter(p => 
@@ -120,8 +119,6 @@ export default function DashboardPage() {
 
       const uniqueDeps = [...new Set(allMovementsForDepartments.map((m) => m.department))].filter((dep): dep is string => typeof dep === 'string');
       setAllDepartments(uniqueDeps);
-
-      // Chamar a função de alerta após carregar os produtos
       checkExpirationAlerts(productsData);
 
     } catch (error) {
