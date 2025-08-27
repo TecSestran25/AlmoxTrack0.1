@@ -240,17 +240,17 @@ export default function ConsumptionRequestForm() {
                                 <SelectValue placeholder="Selecione um setor" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="Transito">Trânsito</SelectItem>
-                                <SelectItem value="Guarda">Guarda</SelectItem>
-                                <SelectItem value="Transporte">Transporte</SelectItem>
-                                <SelectItem value="Administracao">Administração</SelectItem>
-                                <SelectItem value="Financeiro">Financeiro</SelectItem>
+                                <SelectItem value="Secretario">Gabinete do secretário</SelectItem>
+                                <SelectItem value="LicitacaoEContrato">Setor de licitação</SelectItem>
+                                <SelectItem value="Monitoramento">Setor do Monitoramento</SelectItem>
+                                <SelectItem value="Guarda">Comando da GCM</SelectItem>
+                                <SelectItem value="Vigilancia">Gerência da Vigilância</SelectItem>
+                                <SelectItem value="Administracao">Departamento Administrativo</SelectItem>
+                                <SelectItem value="Tecnologia">Setor de T.I</SelectItem>
+                                <SelectItem value="Transito">Gerência de trânsito</SelectItem>
+                                <SelectItem value="Transporte">Gerência de transporte</SelectItem>
+                                <SelectItem value="Engenharia">Setor de engenharia</SelectItem>
                                 <SelectItem value="Limpeza">Limpeza</SelectItem>
-                                <SelectItem value="Tecnologia">T.I</SelectItem>
-                                <SelectItem value="Vigilancia">Vigilância</SelectItem>
-                                <SelectItem value="Monitoramento">Monitoramento</SelectItem>
-                                <SelectItem value="LicitacaoEContrato">Licitação e contrato</SelectItem>
-                                <SelectItem value="Secretario">Sala do secretário</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>

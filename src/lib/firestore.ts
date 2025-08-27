@@ -1,5 +1,5 @@
 import { db } from './firebase';
-import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, where, runTransaction, increment, QueryConstraint, orderBy, limit, getDoc, setDoc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, where, runTransaction, increment, QueryConstraint, orderBy, limit, getDoc, startAfter, DocumentSnapshot, DocumentData } from 'firebase/firestore';
 import { getStorage, ref, uploadString, getDownloadURL } from "firebase/storage";
 import { parseISO } from 'date-fns';
 
@@ -107,6 +107,11 @@ const productsCollection = collection(db, 'products');
 const movementsCollection = collection(db, 'movements');
 const requestsCollection = collection(db, 'requests');
 
+export interface PaginatedProducts {
+  products: Product[];
+  lastDoc: DocumentSnapshot<DocumentData> | null;
+}
+
 export const getUserData = async (uid: string): Promise<UserData | null> => {
     try {
         const userDocRef = doc(db, "users", uid);
@@ -135,41 +140,40 @@ export const getUserRole = async (uid: string): Promise<string | null> => {
     }
 };
 
-export const getProducts = async (filters: ProductFilters = {}): Promise<Product[]> => {
-    const { searchTerm, materialType } = filters;
-    const constraints: QueryConstraint[] = [];
+export const getProducts = async (
+  filters: ProductFilters = {}, 
+  pageSize: number, 
+  cursor?: DocumentSnapshot<DocumentData>
+): Promise<PaginatedProducts> => {
+  const { searchTerm, materialType } = filters;
+  
+  const constraints: QueryConstraint[] = [
+    orderBy('name_lowercase'),
+    limit(pageSize)
+  ];
 
-    if (materialType) {
-        constraints.push(where('type', '==', materialType));
-    }
+  if (cursor) {
+    constraints.push(startAfter(cursor));
+  }
+  
+  if (materialType) {
+    constraints.push(where('type', '==', materialType));
+  }
 
-    if (searchTerm && searchTerm.length > 0) {
-        const lowercasedTerm = searchTerm.toLowerCase();
-        const nameQuery = query(productsCollection, ...constraints, 
-            orderBy('name_lowercase'), 
-            where('name_lowercase', '>=', lowercasedTerm), 
-            where('name_lowercase', '<=', lowercasedTerm + '\uf8ff')
-        );
-        const codeQuery = query(productsCollection, ...constraints, 
-            where('code', '==', searchTerm)
-        );
+  if (searchTerm && searchTerm.length > 0) {
+    const lowercasedTerm = searchTerm.toLowerCase();
+    constraints.push(where('name_lowercase', '>=', lowercasedTerm));
+    constraints.push(where('name_lowercase', '<=', lowercasedTerm + '\uf8ff'));
+  }
+  
+  const finalQuery = query(productsCollection, ...constraints);
+  const snapshot = await getDocs(finalQuery);
 
-        const [nameSnapshot, codeSnapshot] = await Promise.all([
-            getDocs(nameQuery),
-            getDocs(codeQuery)
-        ]);
-
-        const productsMap = new Map<string, Product>();
-        nameSnapshot.docs.forEach(doc => productsMap.set(doc.id, { id: doc.id, ...doc.data() } as Product));
-        codeSnapshot.docs.forEach(doc => productsMap.set(doc.id, { id: doc.id, ...doc.data() } as Product));
-
-        return Array.from(productsMap.values());
-    } else {
-        constraints.push(orderBy('name_lowercase'));
-        const finalQuery = query(productsCollection, ...constraints);
-        const snapshot = await getDocs(finalQuery);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
-    }
+  const products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
+  
+  const lastDoc = snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null;
+  
+  return { products, lastDoc };
 };
 
 
@@ -428,6 +432,24 @@ export const finalizeReturn = async (returnData: ReturnData): Promise<void> => {
         console.error("Transaction failed: ", e);
         throw e;
     }
+};
+
+export const getMovementsForProducts = async (productIds: string[]): Promise<Movement[]> => {
+  if (!productIds || productIds.length === 0) {
+    return [];
+  }
+  
+  const movementsCollection = collection(db, 'movements');
+  const q = query(movementsCollection, where('productId', 'in', productIds));
+  
+  const querySnapshot = await getDocs(q);
+  
+  const movements: Movement[] = [];
+  querySnapshot.forEach(doc => {
+    movements.push({ id: doc.id, ...doc.data() } as Movement);
+  });
+  
+  return movements;
 };
 
 export const getMovements = async (filters: MovementFilters = {}): Promise<Movement[]> => {

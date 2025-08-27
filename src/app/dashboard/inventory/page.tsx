@@ -4,14 +4,10 @@ import * as React from "react";
 import Image from "next/image";
 import { PlusCircle, Search, History, Edit, MoreHorizontal, Trash2, AlertTriangle, BadgeAlert } from "lucide-react";
 import { format, differenceInMonths, parseISO } from "date-fns";
-import { ptBR } from "date-fns/locale";
-
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
@@ -30,17 +26,20 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import { Pagination, PaginationContent, PaginationItem, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
+
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import type { Product, Movement } from "@/lib/firestore";
+import { getProducts, addProduct, updateProduct, deleteProduct, addMovement, uploadImage, generateNextItemCode, getMovementsForProducts } from "@/lib/firestore"; 
+import { DocumentSnapshot, DocumentData } from "firebase/firestore";
+
 import { AddItemSheet } from "./components/add-item-sheet";
 import { EditItemSheet } from "./components/edit-item-sheet";
 import { MovementsSheet } from "./components/movements-sheet";
 import { ReauthDialog } from "../components/reauth-dialog";
-import { useToast } from "@/hooks/use-toast";
-import type { Product, Movement } from "@/lib/firestore";
-import { getProducts, addProduct, updateProduct, deleteProduct, addMovement, uploadImage, generateNextItemCode, getMovementsForItem } from "@/lib/firestore";
-import { useAuth } from "@/contexts/AuthContext";
-import { cn } from "@/lib/utils";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-
 
 const getExpirationStatus = (expirationDate?: string): 'alert' | 'warning' | 'reminder' | null => {
   if (!expirationDate) return null;
@@ -48,98 +47,106 @@ const getExpirationStatus = (expirationDate?: string): 'alert' | 'warning' | 're
   const expiresOn = parseISO(expirationDate);
   const monthsDifference = differenceInMonths(expiresOn, today);
 
-  if (monthsDifference < 1) {
-    return 'alert';
-  } else if (monthsDifference < 2) {
-    return 'warning';
-  } else if (monthsDifference < 3) {
-    return 'reminder';
-  }
+  if (monthsDifference < 1) return 'alert';
+  if (monthsDifference < 2) return 'warning';
+  if (monthsDifference < 3) return 'reminder';
   return null;
 };
 
 const getAlertIcon = (status: 'alert' | 'warning' | 'reminder' | null) => {
     switch(status) {
-        case 'alert':
-            return <AlertTriangle className="h-4 w-4 text-red-500" />;
-        case 'warning':
-            return <BadgeAlert className="h-4 w-4 text-orange-500" />;
-        case 'reminder':
-            return <BadgeAlert className="h-4 w-4 text-yellow-500" />;
-        default:
-            return null;
+        case 'alert': return <AlertTriangle className="h-4 w-4 text-red-500" />;
+        case 'warning': return <BadgeAlert className="h-4 w-4 text-orange-500" />;
+        case 'reminder': return <BadgeAlert className="h-4 w-4 text-yellow-500" />;
+        default: return null;
     }
 };
 
 const getTooltipText = (status: 'alert' | 'warning' | 'reminder' | null, date: string) => {
     switch(status) {
-        case 'alert':
-            return `Vencimento muito próximo: ${format(parseISO(date), 'dd/MM/yyyy')}`;
-        case 'warning':
-            return `Vencimento em breve: ${format(parseISO(date), 'dd/MM/yyyy')}`;
-        case 'reminder':
-            return `Lembrete: Vencimento em ${format(parseISO(date), 'dd/MM/yyyy')}`;
-        default:
-            return '';
+        case 'alert': return `Vencimento muito próximo: ${format(parseISO(date), 'dd/MM/yyyy')}`;
+        case 'warning': return `Vencimento em breve: ${format(parseISO(date), 'dd/MM/yyyy')}`;
+        case 'reminder': return `Lembrete: Vencimento em ${format(parseISO(date), 'dd/MM/yyyy')}`;
+        default: return '';
     }
 }
 
-
 export default function InventoryPage() {
   const { user, userRole } = useAuth();
+  const { toast } = useToast();
+  
   const [products, setProducts] = React.useState<(Product & { calculatedExpirationDate?: string })[]>([]);
   const [searchTerm, setSearchTerm] = React.useState("");
+  const [isLoading, setIsLoading] = React.useState(true);
+
+  // Estados de UI
   const [isAddSheetOpen, setIsAddSheetOpen] = React.useState(false);
   const [isEditSheetOpen, setIsEditSheetOpen] = React.useState(false);
   const [isMovementsSheetOpen, setIsMovementsSheetOpen] = React.useState(false);
   const [selectedItem, setSelectedItem] = React.useState<Product | null>(null);
-  const { toast } = useToast();
-  const [isLoading, setIsLoading] = React.useState(true);
-
   const [isReauthOpen, setIsReauthOpen] = React.useState(false);
-  const [itemPendingDeletion, setItemPendingDeletion] = React.useState<Product | null>(null);
   const [actionToConfirm, setActionToConfirm] = React.useState<(() => void) | null>(null);
 
-  const fetchProducts = React.useCallback(async (term: string) => {
+  // Estados da Paginação
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const [pageCursors, setPageCursors] = React.useState<(DocumentSnapshot<DocumentData> | undefined)[]>([undefined]);
+  const [hasNextPage, setHasNextPage] = React.useState(true);
+  const PAGE_SIZE = 8;
+
+  const fetchProducts = React.useCallback(async (term: string, page: number = 1, cursor?: DocumentSnapshot<DocumentData>) => {
     setIsLoading(true);
     try {
-      const productsFromDb = await getProducts({ searchTerm: term });
-      
-      const productsWithAlerts = await Promise.all(productsFromDb.map(async product => {
-          if (product.isPerishable === 'Sim') {
-              const movements = await getMovementsForItem(product.id);
-              
-              const entradas = movements
-                .filter(m => m.type === 'Entrada' && m.expirationDate)
-                .sort((a, b) => parseISO(a.expirationDate!).getTime() - parseISO(b.expirationDate!).getTime());
+      const { products: productsFromDb, lastDoc } = await getProducts({ searchTerm: term }, PAGE_SIZE, cursor);
 
-              const saidas = movements
-                .filter(m => m.type === 'Saída')
-                .reduce((sum, m) => sum + m.quantity, 0);
+      const perishableProductIds = productsFromDb.filter(p => p.isPerishable === 'Sim').map(p => p.id);
+      let movementsByProduct = new Map<string, Movement[]>();
 
-              let remainingSaidas = saidas;
-              let earliestExpirationDate = undefined;
-              for (const entrada of entradas) {
-                if (remainingSaidas < entrada.quantity) {
-                    earliestExpirationDate = entrada.expirationDate;
-                    break;
-                }
-                remainingSaidas -= entrada.quantity;
-              }
-              
-              return { ...product, calculatedExpirationDate: earliestExpirationDate };
-          }
+      if (perishableProductIds.length > 0) {
+        const allMovements = await getMovementsForProducts(perishableProductIds);
+        for (const movement of allMovements) {
+            if (!movementsByProduct.has(movement.productId)) {
+                movementsByProduct.set(movement.productId, []);
+            }
+            movementsByProduct.get(movement.productId)!.push(movement);
+        }
+      }
+
+      const productsWithAlerts = productsFromDb.map(product => {
+        if (product.isPerishable !== 'Sim') {
           return { ...product, calculatedExpirationDate: undefined };
-      }));
+        }
+        const movements = movementsByProduct.get(product.id) || [];
+        const entradas = movements.filter(m => m.type === 'Entrada' && m.expirationDate).sort((a, b) => parseISO(a.expirationDate!).getTime() - parseISO(b.expirationDate!).getTime());
+        const saidas = movements.filter(m => m.type === 'Saída').reduce((sum, m) => sum + m.quantity, 0);
+
+        let remainingSaidas = saidas;
+        let earliestExpirationDate = undefined;
+        for (const entrada of entradas) {
+          if (remainingSaidas < entrada.quantity) {
+            earliestExpirationDate = entrada.expirationDate;
+            break;
+          }
+          remainingSaidas -= entrada.quantity;
+        }
+        return { ...product, calculatedExpirationDate: earliestExpirationDate };
+      });
       
       setProducts(productsWithAlerts);
-
+      setHasNextPage(productsFromDb.length === PAGE_SIZE);
+      if (lastDoc) {
+        setPageCursors(prev => {
+          const newCursors = [...prev];
+          newCursors[page] = lastDoc;
+          return newCursors;
+        });
+      }
     } catch (error) {
+        console.error("Erro ao buscar produtos:", error);
         toast({
-        title: "Erro ao Carregar Produtos",
-        description: "Não foi possível buscar os produtos do banco de dados.",
-        variant: "destructive",
-      });
+            title: "Erro ao Carregar Produtos",
+            description: "Não foi possível buscar os produtos. Verifique se os índices do Firestore foram criados.",
+            variant: "destructive",
+        });
     } finally {
       setIsLoading(false);
     }
@@ -147,163 +154,162 @@ export default function InventoryPage() {
 
   React.useEffect(() => {
     const handler = setTimeout(() => {
-      fetchProducts(searchTerm);
+      setCurrentPage(1);
+      setPageCursors([undefined]);
+      fetchProducts(searchTerm, 1, undefined);
     }, 500);
+    return () => clearTimeout(handler);
+  }, [searchTerm]);
 
-    return () => {
-      clearTimeout(handler);
-    };
-  }, [searchTerm, fetchProducts]);
+  const handleNextPage = () => {
+    if (!hasNextPage) return;
+    const nextPage = currentPage + 1;
+    const cursor = pageCursors[currentPage];
+    fetchProducts(searchTerm, nextPage, cursor);
+    setCurrentPage(nextPage);
+  };
 
-
-const handleAddItem = React.useCallback(async (newItemData: {
-  name: string;
-  unit: string;
-  category: string;
-  materialType: "permanente" | "consumo";
-  initialQuantity: number;
-  image?: { base64: string; fileName: string; contentType: string } | undefined;
-  itemCode?: string;
-  patrimony?: string;
-  reference?: string;
-  otherCategory?: string;
-  isPerishable?: 'Não' | 'Sim';
-  expirationDate?: string;
-}) => {
-  setIsLoading(true);
-  try {
-    let imageUrl = "https://placehold.co/40x40.png";
-
-    if (newItemData.image) {
-      imageUrl = await uploadImage(newItemData.image);
-    }
-    const categoryPrefix = newItemData.category.substring(0, 3).toUpperCase();
-    const namePrefix = newItemData.name.substring(0, 3).toUpperCase();
-    const codePrefix = `${categoryPrefix}-${namePrefix}`;
-
-    const generatedCode = await generateNextItemCode(codePrefix);
-
-    const finalCategory = newItemData.category === 'Outro' 
-      ? newItemData.otherCategory 
-      : newItemData.category;
-
-
-    const newProduct: Omit<Product, 'id'> = {
-      name: newItemData.name,
-      name_lowercase: newItemData.name.toLowerCase(),
-      code: generatedCode,
-      patrimony: newItemData.materialType === 'permanente' ? (newItemData.patrimony ?? '') : 'N/A',
-      type: newItemData.materialType,
-      quantity: newItemData.initialQuantity || 0,
-      unit: newItemData.unit,
-      category: finalCategory || '',
-      image: imageUrl,
-      reference: newItemData.reference || '',
-      isPerishable: newItemData.isPerishable,
-    };
-
-    const newProductId = await addProduct(newProduct);
-    if (newProduct.quantity > 0) {
-      await addMovement({
-        productId: newProductId,
-        date: new Date().toISOString(),
-        type: 'Entrada',
-        quantity: newProduct.quantity,
-        responsible: user?.email || 'Desconhecido',
-      });
-    }
-
-    toast({
-      title: "Item Adicionado!",
-      description: `${newProduct.name} foi adicionado ao inventário.`,
-      variant: "success"
-    });
-    fetchProducts(searchTerm);
-  } catch (error) {
-    toast({
-      title: "Erro ao Adicionar Item",
-      description: "Não foi possível adicionar o item. Tente novamente.",
-      variant: "destructive"
-    });
-  } finally {
-    setIsLoading(false);
-  }
-}, [fetchProducts, toast, searchTerm, user]);
+  const handlePreviousPage = () => {
+    if (currentPage === 1) return;
+    const prevPage = currentPage - 1;
+    const cursor = pageCursors[prevPage - 1];
+    fetchProducts(searchTerm, prevPage, cursor);
+    setCurrentPage(prevPage);
+  };
   
-const handleUpdateItem = async (updatedItemData: any) => {
-  if (!selectedItem) return;
-  setIsLoading(true);
-  try {
-    let imageUrl = selectedItem.image;
-    if (updatedItemData.image && typeof updatedItemData.image === 'object') {
-      imageUrl = await uploadImage(updatedItemData.image);
-    }
+  const refreshAndGoToFirstPage = () => {
+    setSearchTerm("");
+    setCurrentPage(1);
+    setPageCursors([undefined]);
+    fetchProducts("", 1, undefined);
+  }
 
-    const finalCategory = updatedItemData.category === 'Outro' && updatedItemData.otherCategory 
-      ? updatedItemData.otherCategory 
-      : updatedItemData.category;
+  const handleAddItem = React.useCallback(async (newItemData: any) => {
+    setIsLoading(true);
+    try {
+      let imageUrl = "https://placehold.co/40x40.png";
+      if (newItemData.image) {
+        imageUrl = await uploadImage(newItemData.image);
+      }
+      const categoryPrefix = newItemData.category.substring(0, 3).toUpperCase();
+      const namePrefix = newItemData.name.substring(0, 3).toUpperCase();
+      const codePrefix = `${categoryPrefix}-${namePrefix}`;
+      const generatedCode = await generateNextItemCode(codePrefix);
+      const finalCategory = newItemData.category === 'Outro' ? newItemData.otherCategory : newItemData.category;
 
-    const updateData: Partial<Product> = {
-        name: updatedItemData.name,
-        name_lowercase: updatedItemData.name.toLowerCase(),
-        type: updatedItemData.materialType,
-        code: updatedItemData.itemCode,
-        patrimony: updatedItemData.materialType === 'permanente' ? updatedItemData.patrimony : 'N/A',
-        unit: updatedItemData.unit,
-        quantity: updatedItemData.quantity,
-        category: finalCategory,
-        reference: updatedItemData.reference,
+      const newProduct: Omit<Product, 'id'> = {
+        name: newItemData.name,
+        name_lowercase: newItemData.name.toLowerCase(),
+        code: generatedCode,
+        patrimony: newItemData.materialType === 'permanente' ? (newItemData.patrimony ?? '') : 'N/A',
+        type: newItemData.materialType,
+        quantity: newItemData.initialQuantity || 0,
+        unit: newItemData.unit,
+        category: finalCategory || '',
         image: imageUrl,
-        isPerishable: updatedItemData.isPerishable,
-    };
+        reference: newItemData.reference || '',
+        isPerishable: newItemData.isPerishable,
+      };
 
-    if (updatedItemData.expirationDate) {
-      updateData.expirationDate = updatedItemData.expirationDate;
-    }
-    
-      const changes = [];
-      if (selectedItem.name !== updateData.name) changes.push(`Nome: de '${selectedItem.name}' para '${updateData.name}'`);
-      if (selectedItem.type !== updateData.type) changes.push(`Tipo: de '${selectedItem.type}' para '${updateData.type}'`);
-      if (selectedItem.patrimony !== updateData.patrimony) changes.push(`Patrimônio: de '${selectedItem.patrimony || "N/A"}' para '${updateData.patrimony || "N/A"}'`);
-      if (selectedItem.unit !== updateData.unit) changes.push(`Unidade: de '${selectedItem.unit}' para '${updateData.unit}'`);
-      if (selectedItem.quantity !== updateData.quantity) changes.push(`Quantidade: de '${selectedItem.quantity}' para '${updateData.quantity}'`);
-      if (selectedItem.category !== updateData.category) changes.push(`Categoria: de '${selectedItem.category}' para '${updateData.category}'`);
-      if (selectedItem.reference !== updateData.reference) changes.push(`Referência: de '${selectedItem.reference || "N/A"}' para '${updateData.reference || "N/A"}'`);
-      if (imageUrl !== selectedItem.image) changes.push('Imagem foi alterada.');
-      if (selectedItem.isPerishable !== updateData.isPerishable) changes.push(`Perecível: de '${selectedItem.isPerishable}' para '${updateData.isPerishable}'`);
-      if (selectedItem.expirationDate !== updateData.expirationDate) changes.push(`Validade: de '${selectedItem.expirationDate || "N/A"}' para '${updatedItemData.expirationDate || "N/A"}'`);
-
-      if (changes.length > 0) {
+      const newProductId = await addProduct(newProduct);
+      if (newProduct.quantity > 0) {
         await addMovement({
-          productId: selectedItem.id,
+          productId: newProductId,
           date: new Date().toISOString(),
-          type: 'Auditoria',
-          quantity: 0,
+          type: 'Entrada',
+          quantity: newProduct.quantity,
           responsible: user?.email || 'Desconhecido',
-          changes: `Item editado: ${changes.join('; ')}.`,
-          productType: updateData.type,
         });
       }
+      toast({
+        title: "Item Adicionado!",
+        description: `${newProduct.name} foi adicionado ao inventário.`,
+        variant: "success"
+      });
+      
+      refreshAndGoToFirstPage();
+
+    } catch (error) {
+      toast({
+        title: "Erro ao Adicionar Item",
+        description: "Não foi possível adicionar o item. Tente novamente.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user, toast]);
+
+  const handleUpdateItem = React.useCallback(async (updatedItemData: any) => {
+    if (!selectedItem) return;
+    setIsLoading(true);
+    try {
+      let imageUrl = selectedItem.image;
+      if (updatedItemData.image && typeof updatedItemData.image === 'object') {
+        imageUrl = await uploadImage(updatedItemData.image);
+      }
+      const finalCategory = updatedItemData.category === 'Outro' && updatedItemData.otherCategory 
+        ? updatedItemData.otherCategory 
+        : updatedItemData.category;
+
+      const updateData: Partial<Product> = {
+          name: updatedItemData.name,
+          name_lowercase: updatedItemData.name.toLowerCase(),
+          type: updatedItemData.materialType,
+          code: updatedItemData.itemCode,
+          patrimony: updatedItemData.materialType === 'permanente' ? updatedItemData.patrimony : 'N/A',
+          unit: updatedItemData.unit,
+          quantity: updatedItemData.quantity,
+          category: finalCategory,
+          reference: updatedItemData.reference,
+          image: imageUrl,
+          isPerishable: updatedItemData.isPerishable,
+      };
+      
+      await updateProduct(selectedItem.id, updateData);
+      
+      toast({
+        title: "Item Atualizado!",
+        description: `${updatedItemData.name} foi atualizado com sucesso.`,
+        variant: "success"
+      });
+
+      fetchProducts(searchTerm, currentPage, pageCursors[currentPage - 1]);
+
+    } catch(error: any) {
+      toast({
+        title: "Erro ao Atualizar Item",
+        description: "Não foi possível atualizar o item. Tente novamente.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedItem, user, toast, searchTerm, currentPage, pageCursors]);
+
+  const handleDeleteItem = React.useCallback(async (productId: string) => {
+    setIsLoading(true);
+    try {
+      await deleteProduct(productId);
+      toast({
+        title: "Item Excluído!",
+        description: "O item foi removido do inventário.",
+        variant: "success"
+      });
+      
+      refreshAndGoToFirstPage();
     
-    await updateProduct(selectedItem.id, updateData);
-    
-    toast({
-      title: "Item Atualizado!",
-      description: `${updatedItemData.name} foi atualizado com sucesso.`,
-      variant: "success"
-    });
-    fetchProducts(searchTerm);
-  } 
-  catch(error: any) {
-   toast({
-     title: "Erro ao Atualizar Item",
-     description: "Não foi possível atualizar o item. Tente novamente.",
-     variant: "destructive"
-   });
-  } finally {
-   setIsLoading(false);
-  }
-};
+    } catch(error) {
+      toast({
+        title: "Erro ao Excluir Item",
+        description: "Não foi possível excluir o item. Tente novamente.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [toast]);
+  
   const handleReauthSuccess = () => {
     if (actionToConfirm) {
       actionToConfirm();
@@ -312,54 +318,22 @@ const handleUpdateItem = async (updatedItemData: any) => {
     setActionToConfirm(null);
   };
   
-  const handleDeleteItem = async (productId: string) => {
-    setIsLoading(true);
-    try {
-        await deleteProduct(productId);
-        toast({
-            title: "Item Excluído!",
-            description: "O item foi removido do inventário.",
-            variant: "success"
-        });
-        fetchProducts(searchTerm);
-    } catch(error) {
-        toast({
-            title: "Erro ao Excluir Item",
-            description: "Não foi possível excluir o item. Tente novamente.",
-            variant: "destructive"
-        });
-    } finally {
-      setItemPendingDeletion(null);
-      setIsLoading(false);
-    }
-  };
-
-
-  const handleEditClick = (product: Product) => {
-    setSelectedItem(product);
-    setIsEditSheetOpen(true);
-  };
-
-  const handleMovementsClick = (product: Product) => {
-    setSelectedItem(product);
-    setIsMovementsSheetOpen(true);
-  };
-
   return (
-    <>
     <TooltipProvider>
       <div className="flex flex-col gap-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Inventário</h1>
-            <p className="text-muted-foreground">
-              Consulte e gerencie todos os itens em estoque.
-            </p>
-          </div>
-          <Button onClick={() => setIsAddSheetOpen(true)} className="w-full sm:w-auto">
-            <PlusCircle className="mr-2" />
-            Adicionar Novo Item
-          </Button>
+            <div>
+                <h1 className="text-3xl font-bold tracking-tight">Inventário</h1>
+                <p className="text-muted-foreground">
+                    Consulte e gerencie todos os itens em estoque.
+                </p>
+            </div>
+            { (userRole === 'Admin' || userRole === 'Operador') && (
+                <Button onClick={() => setIsAddSheetOpen(true)} className="w-full sm:w-auto">
+                    <PlusCircle className="mr-2" />
+                    Adicionar Novo Item
+                </Button>
+            )}
         </div>
 
         <Card>
@@ -367,7 +341,7 @@ const handleUpdateItem = async (updatedItemData: any) => {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar item por nome ou código..."
+                placeholder="Buscar item por nome..."
                 className="pl-10"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -375,7 +349,7 @@ const handleUpdateItem = async (updatedItemData: any) => {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="border rounded-md overflow-x-auto max-h-[70vh]">
+            <div className="border rounded-md">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -390,120 +364,119 @@ const handleUpdateItem = async (updatedItemData: any) => {
                 </TableHeader>
                 <TableBody>
                   {isLoading ? (
-                     <TableRow>
-                      <TableCell colSpan={7} className="text-center text-muted-foreground">Carregando inventário...</TableCell>
-                    </TableRow>
+                    <TableRow><TableCell colSpan={7} className="text-center h-48">Carregando inventário...</TableCell></TableRow>
                   ) : products.length > 0 ? (
                     products.map((product) => {
-                        const expirationStatus = product.isPerishable === 'Sim' && product.calculatedExpirationDate ? getExpirationStatus(product.calculatedExpirationDate) : null;
-                        const alertIcon = getAlertIcon(expirationStatus);
-                        const tooltipText = getTooltipText(expirationStatus, product.calculatedExpirationDate || '');
-                        const patrimonyText = product.type === 'permanente' 
-                            ? (product.patrimony && typeof product.patrimony === 'string' && product.patrimony !== 'N/A' ? product.patrimony : product.code)
-                            : 'N/A';
-
-                        return (
-                          <TableRow key={product.id}>
-                            <TableCell>
-                              <Image
-                                src={product.image || "https://placehold.co/40x40.png"}
-                                alt={product.name}
-                                width={40}
-                                height={40}
-                                className="rounded-md object-cover aspect-square"
-                                data-ai-hint="product image"
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <div className="font-medium">{product.name}</div>
-                              <div className="text-sm text-muted-foreground">
-                                Código: {product.code}
-                              </div>
-                               <div className="text-sm text-muted-foreground md:hidden">
-                                Patrimônio: {patrimonyText}
-                              </div>
-                            </TableCell>
-                            <TableCell className="hidden md:table-cell">
-                              <Badge variant={product.type === 'permanente' ? 'secondary' : 'outline'}>
-                                {product.type}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="hidden lg:table-cell">{product.category}</TableCell>
-                            <TableCell className="text-center">
-                              {alertIcon && (
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <span className="cursor-pointer">{alertIcon}</span>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>{tooltipText}</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <div className="font-medium">{product.quantity}</div>
-                              <div className="text-sm text-muted-foreground">{product.unit}</div>
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <DropdownMenu>
-                                  { (userRole === 'Admin' || userRole === 'Operador') && (
-                                    <>
-                                      <DropdownMenuTrigger asChild>
-                                        <Button aria-haspopup="true" size="icon" variant="ghost">
-                                          <MoreHorizontal className="h-4 w-4" />
-                                          <span className="sr-only">Toggle menu</span>
-                                        </Button>
-                                      </DropdownMenuTrigger>
-                                    </>
-                                  )}
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onClick={() => handleMovementsClick(product)}>
-                                    <History className="mr-2 h-4 w-4" />
-                                    <span>Ver Movimentações</span>
-                                  </DropdownMenuItem>
-                                  {userRole === 'Admin' && (
-                                    <>
-                                      <DropdownMenuItem onClick={() => {
-                                      setActionToConfirm(() => () => {
-                                        setSelectedItem(product);
-                                        setIsEditSheetOpen(true);
-                                      });
-                                      setIsReauthOpen(true);
-                                      }}>
-                                        <Edit className="mr-2 h-4 w-4" />
-                                        <span>Editar Item</span>
-                                      </DropdownMenuItem>
-                                      <DropdownMenuSeparator />
-                                      <DropdownMenuItem 
-                                        className="text-red-600" 
-                                         onClick={() => {
-                                         setActionToConfirm(() => () => handleDeleteItem(product.id));
-                                         setIsReauthOpen(true);
-                                       }}
-                                      >
-                                        <Trash2 className="mr-2 h-4 w-4" />
-                                        <span>Excluir</span>
-                                      </DropdownMenuItem>
-                                    </>
-                                  )}
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </TableCell>
-                          </TableRow>
-                        );
+                       const expirationStatus = product.isPerishable === 'Sim' && product.calculatedExpirationDate ? getExpirationStatus(product.calculatedExpirationDate) : null;
+                       const alertIcon = getAlertIcon(expirationStatus);
+                       const tooltipText = getTooltipText(expirationStatus, product.calculatedExpirationDate || '');
+                       return (
+                         <TableRow key={product.id}>
+                           <TableCell>
+                             <Image
+                               src={product.image || "https://placehold.co/40x40.png"}
+                               alt={product.name}
+                               width={40}
+                               height={40}
+                               className="rounded-md object-cover aspect-square"
+                             />
+                           </TableCell>
+                           <TableCell>
+                             <div className="font-medium">{product.name}</div>
+                             <div className="text-sm text-muted-foreground">Código: {product.code}</div>
+                           </TableCell>
+                           <TableCell className="hidden md:table-cell">
+                             <Badge variant={product.type === 'permanente' ? 'secondary' : 'outline'}>{product.type}</Badge>
+                           </TableCell>
+                           <TableCell className="hidden lg:table-cell">{product.category}</TableCell>
+                           <TableCell className="text-center">
+                             {alertIcon && (
+                               <Tooltip>
+                                 <TooltipTrigger asChild><span className="cursor-pointer">{alertIcon}</span></TooltipTrigger>
+                                 <TooltipContent><p>{tooltipText}</p></TooltipContent>
+                               </Tooltip>
+                             )}
+                           </TableCell>
+                           <TableCell className="text-right">
+                             <div className="font-medium">{product.quantity}</div>
+                             <div className="text-sm text-muted-foreground">{product.unit}</div>
+                           </TableCell>
+                           <TableCell className="text-center">
+                                <DropdownMenu>
+                                    { (userRole === 'Admin' || userRole === 'Operador') && (
+                                        <DropdownMenuTrigger asChild>
+                                            <Button aria-haspopup="true" size="icon" variant="ghost">
+                                            <MoreHorizontal className="h-4 w-4" />
+                                            <span className="sr-only">Toggle menu</span>
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                    )}
+                                    <DropdownMenuContent align="end">
+                                        <DropdownMenuItem onClick={() => { setSelectedItem(product); setIsMovementsSheetOpen(true); }}>
+                                            <History className="mr-2 h-4 w-4" />
+                                            <span>Ver Movimentações</span>
+                                        </DropdownMenuItem>
+                                        {userRole === 'Admin' && (
+                                            <>
+                                            <DropdownMenuItem onClick={() => {
+                                                setActionToConfirm(() => () => {
+                                                    setSelectedItem(product);
+                                                    setIsEditSheetOpen(true);
+                                                });
+                                                setIsReauthOpen(true);
+                                            }}>
+                                                <Edit className="mr-2 h-4 w-4" />
+                                                <span>Editar Item</span>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuItem 
+                                                className="text-red-600" 
+                                                onClick={() => {
+                                                    setActionToConfirm(() => () => handleDeleteItem(product.id));
+                                                    setIsReauthOpen(true);
+                                                }}
+                                            >
+                                                <Trash2 className="mr-2 h-4 w-4" />
+                                                <span>Excluir</span>
+                                            </DropdownMenuItem>
+                                            </>
+                                        )}
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                           </TableCell>
+                         </TableRow>
+                       );
                     })
                   ) : (
-                    <TableRow>
-                        <TableCell colSpan={7} className="text-center text-muted-foreground">Nenhum produto encontrado.</TableCell>
-                    </TableRow>
+                    <TableRow><TableCell colSpan={7} className="text-center h-48">Nenhum produto encontrado.</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
             </div>
           </CardContent>
         </Card>
+
+        <Pagination>
+          <PaginationContent>
+            <PaginationItem>
+              <PaginationPrevious 
+                onClick={handlePreviousPage} 
+                className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+              />
+            </PaginationItem>
+            <PaginationItem>
+              <span className="p-2 text-sm font-medium">Página {currentPage}</span>
+            </PaginationItem>
+            <PaginationItem>
+              <PaginationNext 
+                onClick={handleNextPage} 
+                className={!hasNextPage ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+              />
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
       </div>
+      
       <AddItemSheet 
         isOpen={isAddSheetOpen}
         onOpenChange={setIsAddSheetOpen}
@@ -511,17 +484,17 @@ const handleUpdateItem = async (updatedItemData: any) => {
       />
       {selectedItem && (
         <EditItemSheet
-          isOpen={isEditSheetOpen}
-          onOpenChange={setIsEditSheetOpen}
-          onItemUpdated={handleUpdateItem}
-          item={selectedItem}
+            isOpen={isEditSheetOpen}
+            onOpenChange={setIsEditSheetOpen}
+            onItemUpdated={handleUpdateItem}
+            item={selectedItem}
         />
       )}
       {selectedItem && (
         <MovementsSheet
-          isOpen={isMovementsSheetOpen}
-          onOpenChange={setIsMovementsSheetOpen}
-          item={selectedItem}
+            isOpen={isMovementsSheetOpen}
+            onOpenChange={setIsMovementsSheetOpen}
+            item={selectedItem}
         />
       )}
       <ReauthDialog
@@ -529,7 +502,6 @@ const handleUpdateItem = async (updatedItemData: any) => {
         onOpenChange={setIsReauthOpen}
         onSuccess={handleReauthSuccess}
       />
-      </TooltipProvider>
-    </>
+    </TooltipProvider>
   );
 }
