@@ -47,7 +47,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import type { Product, Movement } from "@/lib/firestore";
-import { getProducts, getMovements } from "@/lib/firestore";
+import { getAllProducts, getMovements } from "@/lib/firestore";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { startOfMonth, endOfMonth, subMonths } from "date-fns";
@@ -101,7 +101,7 @@ export default function DashboardPage() {
 
     setIsLoading(true);
     try {
-      const productsData = await getProducts();
+      const productsData = await getAllProducts();
       setProducts(productsData);
 
       const [movementsData, allMovementsForDepartments] = await Promise.all([

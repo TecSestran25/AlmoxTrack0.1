@@ -59,6 +59,7 @@ export type RequestData = {
     department: string;
     purpose?: string;
     status: 'pending' | 'approved' | 'rejected';
+    rejectionReason?: string;
     requestedByUid: string;
 };
 
@@ -175,6 +176,57 @@ export const getProducts = async (
   
   return { products, lastDoc };
 };
+
+export const getAllProducts = async (filters: ProductFilters = {}): Promise<Product[]> => {
+  const { materialType } = filters;
+  const constraints: QueryConstraint[] = [orderBy('name_lowercase')];
+
+  if (materialType) {
+    constraints.push(where('type', '==', materialType));
+  }
+  
+  const finalQuery = query(productsCollection, ...constraints);
+  const snapshot = await getDocs(finalQuery);
+  
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
+};
+
+export interface PaginatedRequests {
+  requests: RequestData[];
+  lastDoc: DocumentSnapshot<DocumentData> | null;
+}
+
+// Substitua a função getRequestsForUser existente por esta
+export const getRequestsForUser = async (
+  uid: string, 
+  pageSize: number, 
+  cursor?: DocumentSnapshot<DocumentData>
+): Promise<PaginatedRequests> => {
+  if (!uid) {
+    return { requests: [], lastDoc: null };
+  }
+  
+  const requestsCollection = collection(db, 'requests');
+  
+  const constraints: QueryConstraint[] = [
+    where('requestedByUid', '==', uid),
+    orderBy('date', 'desc'),
+    limit(pageSize)
+  ];
+
+  if (cursor) {
+    constraints.push(startAfter(cursor));
+  }
+  
+  const finalQuery = query(requestsCollection, ...constraints);
+  const snapshot = await getDocs(finalQuery);
+
+  const requests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RequestData));
+  const lastDoc = snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null;
+
+  return { requests, lastDoc };
+};
+
 
 export const searchProducts = async (filters: ProductFilters = {}): Promise<Product[]> => {
   const { searchTerm, materialType } = filters;
@@ -543,13 +595,14 @@ export const approveRequest = async (requestId: string, approvedBy: string): Pro
     });
 };
 
-export const rejectRequest = async (requestId: string, responsible: string): Promise<void> => {
-    const requestRef = doc(db, 'requests', requestId);
-    await updateDoc(requestRef, { 
-        status: 'rejected',
-        rejectedBy: responsible,
-        rejectionDate: new Date().toISOString()
-    });
+export const rejectRequest = async (requestId: string, responsible: string, reason: string): Promise<void> => {
+  const requestRef = doc(db, 'requests', requestId);
+  await updateDoc(requestRef, { 
+      status: 'rejected',
+      rejectedBy: responsible,
+      rejectionDate: new Date().toISOString(),
+      rejectionReason: reason // <-- SALVANDO O MOTIVO
+  });
 };
 
 export const createRequest = async (requestData: Omit<RequestData, 'id' | 'status'>): Promise<string> => {
