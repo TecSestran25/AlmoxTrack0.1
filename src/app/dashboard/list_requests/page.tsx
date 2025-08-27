@@ -9,7 +9,7 @@ import { getRequestsForUser } from "@/lib/firestore";
 import { DocumentSnapshot, DocumentData } from "firebase/firestore";
 
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -31,13 +31,21 @@ import {
     PaginationNext, 
     PaginationPrevious 
 } from "@/components/ui/pagination";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 export default function MyRequestsPage() {
   const { user } = useAuth();
   const [requests, setRequests] = React.useState<RequestData[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
 
-  // Estados para controlar a paginação
+  // Estados da Paginação
   const [currentPage, setCurrentPage] = React.useState(1);
   const [pageCursors, setPageCursors] = React.useState<(DocumentSnapshot<DocumentData> | undefined)[]>([undefined]);
   const [hasNextPage, setHasNextPage] = React.useState(true);
@@ -45,12 +53,10 @@ export default function MyRequestsPage() {
 
   const fetchRequests = React.useCallback(async (page: number, cursor?: DocumentSnapshot<DocumentData>) => {
     if (!user?.uid) return;
-
     setIsLoading(true);
     try {
       const { requests: data, lastDoc } = await getRequestsForUser(user.uid, PAGE_SIZE, cursor);
       setRequests(data);
-      
       setHasNextPage(data.length === PAGE_SIZE);
       if (lastDoc) {
         setPageCursors(prev => {
@@ -61,13 +67,11 @@ export default function MyRequestsPage() {
       }
     } catch (error) {
       console.error("Erro ao buscar requisições:", error);
-      // Opcional: Adicionar um toast de erro aqui
     } finally {
       setIsLoading(false);
     }
-  }, [user]); // A dependência principal é o 'user'
+  }, [user]);
 
-  // useEffect para a carga inicial dos dados
   React.useEffect(() => {
     if (user?.uid) {
       fetchRequests(1, undefined);
@@ -85,7 +89,6 @@ export default function MyRequestsPage() {
   const handlePreviousPage = () => {
     if (currentPage === 1) return;
     const prevPage = currentPage - 1;
-    // O cursor para voltar para a pág anterior é o que inicia aquela página
     const cursor = pageCursors[prevPage - 1]; 
     fetchRequests(prevPage, cursor);
     setCurrentPage(prevPage);
@@ -110,8 +113,40 @@ export default function MyRequestsPage() {
         return 'Pendente';
     }
   }
-  
-  // A função de clique de exemplo foi removida pois não era utilizada.
+
+  const StatusBadge = ({ request }: { request: RequestData }) => {
+    if (request.status === 'rejected' && request.rejectionReason) {
+        return (
+            <Dialog>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <DialogTrigger asChild>
+                            <Badge variant={getStatusVariant(request.status)} className="cursor-pointer">
+                            {translateStatus(request.status)}
+                            </Badge>
+                        </DialogTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        <p>Clique para ver o motivo</p>
+                    </TooltipContent>
+                </Tooltip>
+                <DialogContent>
+                    <DialogHeader>
+                    <DialogTitle>Motivo da Rejeição</DialogTitle>
+                    <DialogDescription className="pt-4 text-base text-foreground">
+                        {request.rejectionReason}
+                    </DialogDescription>
+                    </DialogHeader>
+                </DialogContent>
+            </Dialog>
+        );
+    }
+    return (
+        <Badge variant={getStatusVariant(request.status)}>
+            {translateStatus(request.status)}
+        </Badge>
+    );
+  };
 
   return (
     <TooltipProvider>
@@ -128,19 +163,21 @@ export default function MyRequestsPage() {
             <CardTitle>Histórico de Solicitações</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="border rounded-md">
+            {/* --- VISUALIZAÇÃO PARA DESKTOP (TABELA) --- */}
+            {/* A classe `hidden md:block` esconde isso em telas pequenas e mostra em médias/grandes */}
+            <div className="hidden md:block border rounded-md">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Data</TableHead>
                     <TableHead>Itens</TableHead>
-                    <TableHead className="hidden md:table-cell">Finalidade</TableHead>
+                    <TableHead>Finalidade</TableHead>
                     <TableHead className="text-center">Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {isLoading ? (
-                    <TableRow><TableCell colSpan={4} className="text-center h-24">Carregando suas requisições...</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={4} className="text-center h-24">Carregando...</TableCell></TableRow>
                   ) : requests.length > 0 ? (
                     requests.map((request) => (
                       <TableRow key={request.id}>
@@ -149,7 +186,7 @@ export default function MyRequestsPage() {
                         </TableCell>
                         <TableCell>
                           <Tooltip>
-                            <TooltipTrigger>
+                            <TooltipTrigger asChild>
                               <span className="underline decoration-dashed cursor-pointer">
                                 {request.items.length} item(s)
                               </span>
@@ -163,23 +200,9 @@ export default function MyRequestsPage() {
                             </TooltipContent>
                           </Tooltip>
                         </TableCell>
-                        <TableCell className="hidden md:table-cell">{request.purpose || "N/A"}</TableCell>
+                        <TableCell>{request.purpose || "N/A"}</TableCell>
                         <TableCell className="text-center">
-                          <Badge variant={getStatusVariant(request.status)}>
-                            {translateStatus(request.status)}
-                          </Badge>
-                          {request.status === 'rejected' && request.rejectionReason && (
-                            <Tooltip>
-                               <TooltipTrigger>
-                                  <p className="text-xs text-muted-foreground underline decoration-dashed cursor-pointer mt-1">
-                                      Ver motivo
-                                  </p>
-                               </TooltipTrigger>
-                               <TooltipContent>
-                                   <p className="max-w-xs">{request.rejectionReason}</p>
-                               </TooltipContent>
-                           </Tooltip>
-                          )}
+                          <StatusBadge request={request} />
                         </TableCell>
                       </TableRow>
                     ))
@@ -189,27 +212,77 @@ export default function MyRequestsPage() {
                 </TableBody>
               </Table>
             </div>
+
+            {/* --- VISUALIZAÇÃO PARA MOBILE (CARDS) --- */}
+            {/* A classe `md:hidden` mostra isso em telas pequenas e esconde em médias/grandes */}
+            <div className="md:hidden space-y-4">
+              {isLoading ? (
+                <div className="text-center text-muted-foreground p-4">Carregando...</div>
+              ) : requests.length > 0 ? (
+                requests.map((request) => (
+                    <Card key={request.id}>
+                        <CardHeader>
+                            <CardTitle className="text-base flex justify-between items-center">
+                                <span>
+                                    {format(new Date(request.date), "dd/MM/yyyy", { locale: ptBR })}
+                                </span>
+                                <StatusBadge request={request} />
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="text-sm text-muted-foreground space-y-2">
+                             <div>
+                                <strong>Itens: </strong>
+                                <Dialog>
+                                    <DialogTrigger asChild>
+                                        <span className="underline decoration-dashed cursor-pointer text-primary">
+                                            {request.items.length} item(s)
+                                        </span>
+                                    </DialogTrigger>
+                                    <DialogContent>
+                                        <DialogHeader>
+                                            <DialogTitle>Itens Solicitados</DialogTitle>
+                                        </DialogHeader>
+                                        <ul className="list-disc pl-5 pt-2 space-y-1">
+                                            {request.items.map(item => (
+                                            <li key={item.id}>{item.quantity} {item.unit}(s) de <strong>{item.name}</strong></li>
+                                            ))}
+                                        </ul>
+                                    </DialogContent>
+                                </Dialog>
+                             </div>
+                             <div>
+                                <strong>Finalidade: </strong> {request.purpose || "N/A"}
+                             </div>
+                        </CardContent>
+                    </Card>
+                ))
+              ) : (
+                <div className="text-center text-muted-foreground p-4">Nenhuma requisição encontrada.</div>
+              )}
+            </div>
           </CardContent>
         </Card>
-        <Pagination>
-            <PaginationContent>
-              <PaginationItem>
-                <PaginationPrevious 
-                  onClick={handlePreviousPage} 
-                  className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-                />
-              </PaginationItem>
-              <PaginationItem>
-                <span className="p-2 text-sm font-medium">Página {currentPage}</span>
-              </PaginationItem>
-              <PaginationItem>
-                <PaginationNext 
-                  onClick={handleNextPage}
-                  className={!hasNextPage ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-                />
-              </PaginationItem>
-            </PaginationContent>
-          </Pagination>
+        { (requests.length > 0 || currentPage > 1) && (
+            <Pagination>
+                <PaginationContent>
+                <PaginationItem>
+                    <PaginationPrevious 
+                    onClick={handlePreviousPage} 
+                    className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                    />
+                </PaginationItem>
+                <PaginationItem>
+                    <span className="p-2 text-sm font-medium">Página {currentPage}</span>
+                </PaginationItem>
+                <PaginationItem>
+                    <PaginationNext 
+                    onClick={handleNextPage}
+                    className={!hasNextPage ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                    />
+                </PaginationItem>
+                </PaginationContent>
+            </Pagination>
+        )}
       </div>
     </TooltipProvider>
   );

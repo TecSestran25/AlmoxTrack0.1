@@ -5,6 +5,17 @@ import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Check, X, Loader2, ArrowRight } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { 
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Textarea } from "@/components/ui/textarea";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -22,15 +33,16 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
-import { getPendingRequests, approveRequest, rejectRequest, RequestData } from "@/lib/firestore";
+import { getPendingRequests, rejectRequest, RequestData } from "@/lib/firestore";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
 
 export default function RequestsManagementPage() {
     const [pendingRequests, setPendingRequests] = React.useState<RequestData[]>([]);
     const [isLoading, setIsLoading] = React.useState(true);
     const [isProcessing, setIsProcessing] = React.useState<string | null>(null);
+    const [rejectionReason, setRejectionReason] = React.useState("");
+    const [requestToReject, setRequestToReject] = React.useState<RequestData | null>(null);
     const { user } = useAuth();
     const { toast } = useToast();
     const router = useRouter();
@@ -55,15 +67,9 @@ export default function RequestsManagementPage() {
         fetchRequests();
     }, [fetchRequests]);
 
-    const handleApproveAndRedirect = async (request: RequestData) => {
-        if (!user || !user.email) {
-            toast({ title: "Erro de autenticação", description: "Operador não identificado.", variant: "destructive" });
-            return;
-        }
-
+    const handleApproveAndRedirect = (request: RequestData) => {
         setIsProcessing(request.id);
         try {
-            await approveRequest(request.id, user.email);
             const exitData = {
                 requester: request.requester,
                 department: request.department,
@@ -71,6 +77,7 @@ export default function RequestsManagementPage() {
                 items: request.items.map(item => ({
                     id: item.id,
                     name: item.name,
+                    type: item.type,
                     quantity: item.quantity,
                     unit: item.unit,
                     isPerishable: item.isPerishable,
@@ -79,32 +86,43 @@ export default function RequestsManagementPage() {
             };
 
             const encodedData = btoa(JSON.stringify(exitData));
-            router.push(`/dashboard/exit?requestData=${encodedData}`);
+            const firstItemType = request.items[0]?.type || 'consumo';
+            const tabToOpen = firstItemType === 'permanente' ? 'responsibility' : 'consumption';
+
+            router.push(`/dashboard/exit?requestData=${encodedData}&requestId=${request.id}`);
 
         } catch (error: any) {
-            toast({ title: "Erro ao Aprovar", description: error.message || "Tente novamente mais tarde.", variant: "destructive" });
-        } finally {
+            toast({ title: "Erro ao preparar dados", description: "Não foi possível codificar os dados da requisição.", variant: "destructive" });
             setIsProcessing(null);
         }
     };
 
-    const handleReject = async (requestId: string) => {
-        if (!user || !user.email) {
-            toast({ title: "Erro de autenticação", description: "Operador não identificado.", variant: "destructive" });
-            return;
-        }
+    const handleReject = async (requestId: string, reason: string) => { // <-- Recebe 'reason'
+    if (!user || !user.email) {
+        toast({ title: "Erro de autenticação", description: "Operador não identificado.", variant: "destructive" });
+        return;
+    }
 
-        setIsProcessing(requestId);
-        try {
-            await rejectRequest(requestId, user.email);
-            toast({ title: "Requisição Rejeitada!", description: "A requisição foi movida para o status de rejeitada.", variant: "default" });
-            fetchRequests();
-        } catch (error) {
-            toast({ title: "Erro ao Rejeitar", description: "Não foi possível rejeitar a requisição.", variant: "destructive" });
-        } finally {
-            setIsProcessing(null);
-        }
-    };
+    if (!reason || !reason.trim()) {
+        toast({ title: "Motivo obrigatório", description: "É necessário fornecer um motivo para a rejeição.", variant: "destructive" });
+        return;
+    }
+
+    setIsProcessing(requestId);
+    try {
+        await rejectRequest(requestId, user.email, reason); 
+
+        toast({ title: "Requisição Rejeitada!", description: "A requisição foi movida para o status de rejeitada.", variant: "default" });
+        setRequestToReject(null);
+        setRejectionReason("");
+        fetchRequests();
+
+    } catch (error) {
+        toast({ title: "Erro ao Rejeitar", description: "Não foi possível rejeitar a requisição.", variant: "destructive" });
+    } finally {
+        setIsProcessing(null);
+    }
+};
 
     return (
         <div className="flex flex-col gap-6">
@@ -161,10 +179,11 @@ export default function RequestsManagementPage() {
                                                     variant="ghost"
                                                     size="icon"
                                                     className="text-red-600 hover:bg-red-100"
-                                                    onClick={() => handleReject(request.id)}
+                                                    // 👇 ALTERE ESTA LINHA 👇
+                                                    onClick={() => setRequestToReject(request)} 
                                                     disabled={isProcessing === request.id}
                                                 >
-                                                    <X className="h-4 w-4" />
+                                                    {isProcessing === request.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
                                                 </Button>
                                             </TableCell>
                                         </TableRow>
@@ -181,6 +200,30 @@ export default function RequestsManagementPage() {
                     </div>
                 </CardContent>
             </Card>
+            <AlertDialog open={!!requestToReject} onOpenChange={(isOpen) => !isOpen && setRequestToReject(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Rejeitar Requisição</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Por favor, informe o motivo da rejeição. Esta informação será visível para o solicitante.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <Textarea
+                        placeholder="Ex: Estoque insuficiente, item fora de linha, etc."
+                        value={rejectionReason}
+                        onChange={(e) => setRejectionReason(e.target.value)}
+                    />
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setRequestToReject(null)}>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction 
+                            onClick={() => handleReject(requestToReject!.id, rejectionReason)}
+                            disabled={!rejectionReason.trim()}
+                        >
+                            Confirmar Rejeição
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }
