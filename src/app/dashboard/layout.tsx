@@ -53,11 +53,16 @@ import { auth } from "@/lib/firebase";
 import Image from "next/image";
 import { useTheme } from "next-themes";
 
+
 function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
     const router = useRouter();
     const { toast } = useToast();
     const { user, loading, userRole } = useAuth();
+    const { setTheme } = useTheme();
+    const { theme } = useTheme();
+
+    const logoSrc = theme === 'dark' || 'system' ? "/LOGO_branco.png" : "/LOGO.png";
     
     const allowedPathsByRole = React.useMemo(() => ({
         Requester: ["/dashboard/inventory", "/dashboard/request", "/dashboard/list_requests"],
@@ -126,7 +131,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
         }
     };
 
-    const { setTheme } = useTheme()
+    
 
 
     if (loading || !user || !isVerificationComplete) {
@@ -142,7 +147,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
             <Sidebar className="hidden lg:flex lg:w-64" collapsible="offcanvas" >
                 <SidebarHeader className="mb-3 ml-5">
                     <Image 
-                        src="/LOGO.png" 
+                        src={logoSrc} 
                         width={500} 
                         height={40} 
                         alt="SESTRANS-Goiana" 
@@ -243,7 +248,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                            <DropdownMenuLabel>{userRole}</DropdownMenuLabel>
+                            <DropdownMenuLabel>{user.name || userRole}</DropdownMenuLabel>
                             <DropdownMenuSeparator />
                             <DropdownMenuSub>
                                 <DropdownMenuSubTrigger>

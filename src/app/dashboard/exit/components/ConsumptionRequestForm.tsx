@@ -39,6 +39,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import type { Product } from "@/lib/firestore";
+import { useSearchParams, useRouter } from 'next/navigation';
 import { finalizeExit } from "@/lib/firestore";
 import { ItemSearch } from "../../components/item-search";
 
@@ -60,6 +61,9 @@ type RequestDataFromUrl = {
 
 export default function ConsumptionRequestForm() {
     const { toast } = useToast();
+    const router = useRouter();
+    const searchParams = useSearchParams();
+
     const [requestDate, setRequestDate] = React.useState<Date | undefined>(new Date());
     const [requesterName, setRequesterName] = React.useState("");
     const [requesterId, setRequesterId] = React.useState("");
@@ -69,52 +73,49 @@ export default function ConsumptionRequestForm() {
     const [requestedItems, setRequestedItems] = React.useState<RequestedItem[]>([]);
     const [selectedItem, setSelectedItem] = React.useState<Product | null>(null);
     const [isFinalizing, setIsFinalizing] = React.useState(false);
+    const [requestId, setRequestId] = React.useState<string | null>(null);
 
     const { user, loading: userLoading } = useAuth();
     
     const isInitialLoad = React.useRef(true);
 
     React.useEffect(() => {
-        if (!userLoading && isInitialLoad.current) {
-            isInitialLoad.current = false;
-            
-            const urlParams = new URLSearchParams(window.location.search);
-            const requestDataParam = urlParams.get('requestData');
+        const requestDataParam = searchParams.get('requestData');
+        const requestIdParam = searchParams.get('requestId'); // Captura o ID da requisição
 
-            if (requestDataParam) {
-                try {
-                    const decodedData = atob(requestDataParam);
-                    const parsedData: RequestDataFromUrl = JSON.parse(decodedData);
-                    
-                    const requesterMatch = parsedData.requester.match(/(.*) \((.*)\)/);
-                    if (requesterMatch) {
-                        setRequesterName(requesterMatch[1]);
-                        setRequesterId(requesterMatch[2]);
-                    } else {
-                        setRequesterName(parsedData.requester);
-                        setRequesterId('');
-                    }
-                    
-                    setDepartment(parsedData.department);
-                    setPurpose(parsedData.purpose || '');
-                    setRequestedItems(parsedData.items);
-                    
-                    window.history.replaceState({}, document.title, window.location.pathname);
-                } catch (error) {
-                    console.error("Erro ao decodificar dados da URL:", error);
-                    toast({
-                        title: "Erro",
-                        description: "Não foi possível carregar os dados da requisição.",
-                        variant: "destructive",
-                    });
+        if (requestIdParam) {
+            setRequestId(requestIdParam);
+        }
+
+        if (requestDataParam) {
+            try {
+                const decodedData = atob(requestDataParam);
+                const parsedData = JSON.parse(decodedData);
+                
+                const requesterMatch = parsedData.requester.match(/(.*) \((.*)\)/);
+                if (requesterMatch) {
+                    setRequesterName(requesterMatch[1]);
+                    setRequesterId(requesterMatch[2]);
+                } else {
+                    setRequesterName(parsedData.requester);
                 }
-            } else if (user) {
-                setRequesterName("");
-                setRequesterId("");
-                setDepartment("");
+                
+                setDepartment(parsedData.department);
+                setPurpose(parsedData.purpose || '');
+                setRequestedItems(parsedData.items);
+                
+                // Limpa a URL para evitar recarregamento dos dados
+                window.history.replaceState({}, document.title, window.location.pathname);
+            } catch (error) {
+                console.error("Erro ao decodificar dados da URL:", error);
+                toast({
+                    title: "Erro",
+                    description: "Não foi possível carregar os dados da requisição.",
+                    variant: "destructive",
+                });
             }
         }
-    }, [toast, user, userLoading]);
+    }, [searchParams, toast]);
 
     const handleAddItem = () => {
         if (!selectedItem) {
@@ -161,45 +162,55 @@ export default function ConsumptionRequestForm() {
     };
 
     const handleFinalizeIssue = async () => {
-        if (requestedItems.length === 0) {
-            toast({ title: "Nenhum item solicitado", description: "Adicione pelo menos um item para registrar a saída.", variant: "destructive" });
-            return;
-        }
-
-        if (!requesterName || !requesterId || !department) {
-            toast({ title: "Campos obrigatórios", description: "Por favor, preencha o nome, matrícula e setor do solicitante.", variant: "destructive" });
-            return;
-        }
-        
-        setIsFinalizing(true);
-        try {
-            await finalizeExit({
+        if (requestedItems.length === 0) {
+            toast({ title: "Nenhum item solicitado", variant: "destructive" });
+            return;
+        }
+        if (!requesterName || !department) {
+            toast({ title: "Campos obrigatórios", description: "Nome e departamento são obrigatórios.", variant: "destructive" });
+            return;
+        }
+        
+        setIsFinalizing(true);
+        try {
+            const exitData = {
                 items: requestedItems,
                 date: requestDate?.toISOString() || new Date().toISOString(),
-                requester: `${requesterName} (${requesterId})`,
+                requester: requesterId ? `${requesterName} (${requesterId})` : requesterName,
                 department: department,
                 purpose: purpose,
                 responsible: user?.email || "Desconhecido",
-            });
-            
-            toast({ title: "Saída Registrada!", description: "A saída de materiais de consumo foi registrada com sucesso.", variant: "success" });
+            };
 
-            setRequestDate(new Date());
-            setRequesterName("");
-            setRequesterId("");
-            setDepartment("");
-            setPurpose("");
-            setRequestedItems([]);
-        } catch (error: any) {
-            toast({
-                title: "Erro ao Finalizar Saída",
-                description: error.message || "Não foi possível registrar a saída. Tente novamente.",
-                variant: "destructive"
-            });
-        } finally {
-            setIsFinalizing(false);
-        }
-    };
+            // 👇 AQUI A MÁGICA ACONTECE 👇
+            // Passamos o requestId (se existir) para a função finalizeExit
+            await finalizeExit(exitData, requestId || undefined);
+            
+            toast({ title: "Saída Registrada!", description: "A saída de materiais foi registrada com sucesso.", variant: "success" });
+            
+            // Se veio de uma requisição, redireciona de volta para a tela de gerenciamento
+            if (requestId) {
+                router.push('/dashboard/requests-management');
+            } else {
+                // Limpa o formulário para uma nova saída manual
+                setRequestDate(new Date());
+                setRequesterName("");
+                setRequesterId("");
+                setDepartment("");
+                setPurpose("");
+                setRequestedItems([]);
+            }
+
+        } catch (error: any) {
+            toast({
+                title: "Erro ao Finalizar Saída",
+                description: error.message || "Não foi possível registrar a saída.",
+                variant: "destructive"
+            });
+        } finally {
+            setIsFinalizing(false);
+        }
+    };
 
     return (
         <Card>

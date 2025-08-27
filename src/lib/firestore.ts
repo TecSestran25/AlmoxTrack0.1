@@ -43,6 +43,7 @@ export type Movement = {
 };
 
 export type RequestItem = {
+    type: string;
     id: string;
     name: string;
     quantity: number;
@@ -74,7 +75,7 @@ type EntryData = {
 }
 
 type ExitData = {
-    items: { id: string; quantity: number; expirationDate?: string }[];
+    items: { id: string; quantity: number; expirationDate?: string, type?: boolean }[];
     date: string;
     requester: string;
     department: string;
@@ -420,7 +421,7 @@ const findAndSetNewExpirationDate = async (productId: string) => {
     await updateProduct(productId, { expirationDate: newExpirationDate || "" });
 };
 
-export const finalizeExit = async (exitData: ExitData): Promise<void> => {
+export const finalizeExit = async (exitData: ExitData, requestId?: string): Promise<void> => {
     try {
         await runTransaction(db, async (transaction) => {
             const productRefs = exitData.items.map(item => doc(db, "products", item.id));
@@ -429,6 +430,7 @@ export const finalizeExit = async (exitData: ExitData): Promise<void> => {
             const productUpdates = new Map();
             const movementExits = [];
 
+            // Esta parte continua a mesma: prepara as atualizações de estoque e movimentações
             for (let i = 0; i < exitData.items.length; i++) {
                 const item = exitData.items[i];
                 const productDoc = productDocs[i];
@@ -458,15 +460,31 @@ export const finalizeExit = async (exitData: ExitData): Promise<void> => {
                 movementExits.push(movementData);
             }
             
+            // Aplica as atualizações de estoque
             for (const [ref, data] of productUpdates.entries()) {
                 transaction.update(ref, data);
             }
+
+            // Cria os novos documentos de movimentação
             for (const data of movementExits) {
                 const movementRef = doc(collection(db, "movements"));
                 transaction.set(movementRef, data);
             }
+
+            // -----------------------------------------------------------------
+            // 👇 NOVA LÓGICA ADICIONADA: Atualiza o status da requisição original 👇
+            // -----------------------------------------------------------------
+            if (requestId) {
+                const requestRef = doc(db, "requests", requestId);
+                transaction.update(requestRef, {
+                    status: 'approved',
+                    approvalDate: new Date().toISOString(),
+                    approvedBy: exitData.responsible 
+                });
+            }
         });
         
+        // Esta parte, que fica FORA da transação, continua a mesma
         for (const item of exitData.items) {
             await findAndSetNewExpirationDate(item.id);
         }
@@ -584,15 +602,6 @@ export const getPendingRequests = async (): Promise<RequestData[]> => {
     const q = query(requestsCollection, where('status', '==', 'pending'), orderBy('date', 'desc'));
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RequestData));
-};
-
-export const approveRequest = async (requestId: string, approvedBy: string): Promise<void> => {
-    const requestRef = doc(db, 'requests', requestId);
-    await updateDoc(requestRef, { 
-        status: 'approved', 
-        approvedBy: approvedBy,
-        approvalDate: new Date().toISOString()
-    });
 };
 
 export const rejectRequest = async (requestId: string, responsible: string, reason: string): Promise<void> => {
