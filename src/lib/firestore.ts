@@ -176,6 +176,46 @@ export const getProducts = async (
   return { products, lastDoc };
 };
 
+export const searchProducts = async (filters: ProductFilters = {}): Promise<Product[]> => {
+  const { searchTerm, materialType } = filters;
+  const constraints: QueryConstraint[] = [];
+
+  if (materialType) {
+    constraints.push(where('type', '==', materialType));
+  }
+
+  if (!searchTerm || searchTerm.length < 2) {
+    return [];
+  }
+
+  const lowercasedTerm = searchTerm.toLowerCase();
+
+  const nameQuery = query(productsCollection, 
+    ...constraints, 
+    orderBy('name_lowercase'), 
+    where('name_lowercase', '>=', lowercasedTerm), 
+    where('name_lowercase', '<=', lowercasedTerm + '\uf8ff'),
+    limit(10)
+  );
+  
+  const codeQuery = query(productsCollection, 
+    ...constraints, 
+    where('code', '==', searchTerm),
+    limit(10)
+  );
+
+  const [nameSnapshot, codeSnapshot] = await Promise.all([
+    getDocs(nameQuery),
+    getDocs(codeQuery)
+  ]);
+
+  const productsMap = new Map<string, Product>();
+  nameSnapshot.docs.forEach(doc => productsMap.set(doc.id, { id: doc.id, ...doc.data() } as Product));
+  codeSnapshot.docs.forEach(doc => productsMap.set(doc.id, { id: doc.id, ...doc.data() } as Product));
+
+  return Array.from(productsMap.values());
+};
+
 
 export const addProduct = async (productData: Omit<Product, 'id'>): Promise<string> => {
     const docRef = await addDoc(productsCollection, productData);
