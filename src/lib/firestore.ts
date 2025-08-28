@@ -618,3 +618,18 @@ export const createRequest = async (requestData: Omit<RequestData, 'id' | 'statu
     const docRef = await addDoc(requestsCollection, { ...requestData, status: 'pending' });
     return docRef.id;
 };
+
+export const deleteRequest = async (requestId: string, userId: string): Promise<void> => {
+    const requestRef = doc(db, "requests", requestId);
+
+    const requestSnap = await getDoc(requestRef);
+    if (!requestSnap.exists() || requestSnap.data().requestedByUid !== userId) {
+        throw new Error("Você não tem permissão para cancelar esta requisição.");
+    }
+
+    if (requestSnap.data().status !== 'pending') {
+        throw new Error("Não é possível cancelar uma requisição que já foi processada.");
+    }
+
+    await deleteDoc(requestRef);
+};
