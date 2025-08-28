@@ -67,7 +67,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
     const allowedPathsByRole = React.useMemo(() => ({
         Requester: ["/dashboard/inventory", "/dashboard/request", "/dashboard/list_requests"],
         Operador: ["/dashboard", "/dashboard/inventory", "/dashboard/entry", "/dashboard/exit", "/dashboard/returns", "/dashboard/requests-management"],
-        Admin: ["/dashboard", "/dashboard/inventory", "/dashboard/entry", "/dashboard/exit", "/dashboard/returns", "/dashboard/requests-management", "/dashboard/list_requests"],
+        Admin: ["/dashboard", "/dashboard/inventory", "/dashboard/entry", "/dashboard/exit", "/dashboard/returns", "/dashboard/requests-management"],
     }), []);
     
     const [isVerificationComplete, setIsVerificationComplete] = React.useState(false);
@@ -105,7 +105,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
         { href: "/dashboard/returns", icon: IterationCcw, label: "Devolução", roles: ["Admin", "Operador"] },
         { href: "/dashboard/request", icon: MailPlus, label: "Requisições", roles: ["Requester"] },
         { href: "/dashboard/requests-management", icon: Mailbox, label: "Gerenciar Requisições", roles: ["Admin", "Operador"] },
-        { href: "/dashboard/list_requests", icon: ListChecks, label: "Minhas Requisições", roles: ["Admin", "Requester"] },
+        { href: "/dashboard/list_requests", icon: ListChecks, label: "Minhas Requisições", roles: ["Requester"] },
     ];
 
     const allowedItems = React.useMemo(() => {
