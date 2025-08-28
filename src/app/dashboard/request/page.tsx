@@ -98,6 +98,7 @@ export default function ItemRequestForm() {
                 unit: selectedItem.unit,
                 isPerishable: selectedItem.isPerishable || 'Não',
                 expirationDate: selectedItem.expirationDate || '',
+                type: ""
             };
             
             return [...prev, newItem];
