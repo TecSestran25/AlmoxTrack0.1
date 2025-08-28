@@ -265,6 +265,30 @@ export default function InventoryPage() {
           image: imageUrl,
           isPerishable: updatedItemData.isPerishable,
       };
+
+      
+      const changes = [];
+      if (selectedItem.name !== updateData.name) changes.push(`Nome: de '${selectedItem.name}' para '${updateData.name}'`);
+      if (selectedItem.type !== updateData.type) changes.push(`Tipo: de '${selectedItem.type}' para '${updateData.type}'`);
+      if (selectedItem.patrimony !== updateData.patrimony) changes.push(`Patrimônio: de '${selectedItem.patrimony || "N/A"}' para '${updateData.patrimony || "N/A"}'`);
+      if (selectedItem.unit !== updateData.unit) changes.push(`Unidade: de '${selectedItem.unit}' para '${updateData.unit}'`);
+      if (selectedItem.quantity !== updateData.quantity) changes.push(`Unidade: de '${selectedItem.quantity}' para '${updateData.quantity}'`);
+      if (selectedItem.category !== updateData.category) changes.push(`Categoria: de '${selectedItem.category}' para '${updateData.category}'`);
+      if (selectedItem.reference !== updateData.reference) changes.push(`Referência: de '${selectedItem.reference || "N/A"}' para '${updateData.reference || "N/A"}'`);
+      if (imageUrl !== selectedItem.image) changes.push('Imagem foi alterada.');
+      if (selectedItem.isPerishable !== updateData.isPerishable) changes.push(`Perecível: de '${selectedItem.isPerishable}' para '${updateData.isPerishable}'`);
+
+      if (changes.length > 0) {
+        await addMovement({
+          productId: selectedItem.id,
+          date: new Date().toISOString(),
+          type: 'Auditoria',
+          quantity: 0,
+          responsible: user?.email || 'Desconhecido',
+          changes: `Item editado: ${changes.join('; ')}.`,
+          productType: updateData.type,
+        });
+      }
       
       await updateProduct(selectedItem.id, updateData);
       
