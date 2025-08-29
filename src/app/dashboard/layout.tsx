@@ -62,7 +62,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
     const { setTheme } = useTheme();
     const { theme } = useTheme();
 
-    const logoSrc = theme === 'dark' || 'system' ? "/LOGO_branco.png" : "/LOGO.png";
+    const logoSrc = theme === 'dark' ? "/LOGO_branco.png" : "/LOGO.png";
     
     const allowedPathsByRole = React.useMemo(() => ({
         Requester: ["/dashboard/inventory", "/dashboard/request", "/dashboard/list_requests"],
@@ -217,10 +217,6 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                                         <DropdownMenuItem onClick={() => setTheme("dark")}>
                                             <Moon className="mr-2 h-4 w-4" />
                                             <span>Escuro</span>
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => setTheme("system")}>
-                                            <MonitorSmartphone className="mr-2 h-4 w-4" />
-                                            <span>Sistema</span>
                                         </DropdownMenuItem>
                                     </DropdownMenuSubContent>
                                 </DropdownMenuPortal>
