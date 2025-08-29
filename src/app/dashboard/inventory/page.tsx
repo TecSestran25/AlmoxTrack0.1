@@ -2,12 +2,15 @@
 
 import * as React from "react";
 import Image from "next/image";
-import { PlusCircle, Search, History, Edit, MoreHorizontal, Trash2, AlertTriangle, BadgeAlert } from "lucide-react";
+import { PlusCircle, Search, History, Edit, MoreHorizontal, Trash2, AlertTriangle, BadgeAlert, FileDown } from "lucide-react";
 import { format, differenceInMonths, parseISO } from "date-fns";
 import {
   Card,
   CardContent,
   CardHeader,
+  CardTitle,
+  CardDescription,
+  CardFooter,      
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
@@ -26,6 +29,13 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { Pagination, PaginationContent, PaginationItem, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
@@ -33,7 +43,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import type { Product, Movement } from "@/lib/firestore";
-import { getProducts, addProduct, updateProduct, deleteProduct, addMovement, uploadImage, generateNextItemCode, getMovementsForProducts } from "@/lib/firestore"; 
+import { getProducts, addProduct, updateProduct, deleteProduct, addMovement, uploadImage, generateNextItemCode, getMovementsForProducts , getAllProducts} from "@/lib/firestore"; 
 import { DocumentSnapshot, DocumentData } from "firebase/firestore";
 
 import { AddItemSheet } from "./components/add-item-sheet";
@@ -78,6 +88,7 @@ export default function InventoryPage() {
   const [products, setProducts] = React.useState<(Product & { calculatedExpirationDate?: string })[]>([]);
   const [searchTerm, setSearchTerm] = React.useState("");
   const [isLoading, setIsLoading] = React.useState(true);
+  const [isExporting, setIsExporting] = React.useState(false);
 
   // Estados de UI
   const [isAddSheetOpen, setIsAddSheetOpen] = React.useState(false);
@@ -341,6 +352,89 @@ export default function InventoryPage() {
     setIsReauthOpen(false);
     setActionToConfirm(null);
   };
+
+  const handleExportInventory = async () => {
+    setIsExporting(true);
+    toast({ title: "Gerando relatório...", description: "Buscando dados de produtos e movimentações. Isso pode levar um momento." });
+
+    try {
+        // 1. Busca todos os produtos (sem paginação)
+        const allProducts = await getAllProducts();
+
+        if (allProducts.length === 0) {
+            toast({ title: "Nenhum item para exportar", variant: "destructive" });
+            return;
+        }
+        
+        // 2. Reutiliza a lógica para calcular a data de validade mais próxima
+        const productsWithExpiration = await Promise.all(allProducts.map(async product => {
+            if (product.isPerishable === 'Sim') {
+                const movements = await getMovementsForProducts([product.id]);
+                const entradas = movements.filter(m => m.type === 'Entrada' && m.expirationDate).sort((a, b) => parseISO(a.expirationDate!).getTime() - parseISO(b.expirationDate!).getTime());
+                const saidas = movements.filter(m => m.type === 'Saída').reduce((sum, m) => sum + m.quantity, 0);
+
+                let remainingSaidas = saidas;
+                let earliestExpirationDate = undefined;
+                for (const entrada of entradas) {
+                    if (remainingSaidas < entrada.quantity) {
+                        earliestExpirationDate = entrada.expirationDate;
+                        break;
+                    }
+                    remainingSaidas -= entrada.quantity;
+                }
+                return { ...product, calculatedExpirationDate: earliestExpirationDate };
+            }
+            return { ...product, calculatedExpirationDate: undefined };
+        }));
+
+
+        // 3. Monta o CSV com a nova coluna
+        const escapeCsvCell = (cellData: any) => {
+            const stringData = String(cellData || "");
+            if (stringData.includes(',') || stringData.includes('"') || stringData.includes('\n')) {
+                return `"${stringData.replace(/"/g, '""')}"`;
+            }
+            return stringData;
+        };
+        
+        // Adiciona a nova coluna "Validade Próxima"
+        const headers = ["Código", "Nome", "Quantidade em Estoque", "Unidade", "Categoria", "Tipo", "Nº Patrimônio", "Referência", "Validade Próxima"];
+        
+        const rows = productsWithExpiration.map(p => [
+            escapeCsvCell(p.code),
+            escapeCsvCell(p.name),
+            escapeCsvCell(p.quantity),
+            escapeCsvCell(p.unit),
+            escapeCsvCell(p.category),
+            escapeCsvCell(p.type),
+            escapeCsvCell(p.patrimony),
+            escapeCsvCell(p.reference),
+            // Formata a data de validade calculada ou deixa em branco
+            escapeCsvCell(p.calculatedExpirationDate ? format(parseISO(p.calculatedExpirationDate), 'dd/MM/yyyy') : 'N/A')
+        ].join(','));
+
+        // 4. Gera e baixa o arquivo (sem alteração aqui)
+        const csvContent = [headers.join(','), ...rows].join('\n');
+        const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        const fileName = `relatorio_inventario_com_validade_${format(new Date(), 'yyyy-MM-dd')}.csv`;
+        link.setAttribute("href", url);
+        link.setAttribute("download", fileName);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        toast({ title: "Relatório Gerado!", description: `O arquivo ${fileName} foi baixado.` });
+
+    } catch (error) {
+        console.error("Erro ao exportar inventário:", error);
+        toast({ title: "Erro ao gerar relatório", description: "Não foi possível exportar os dados.", variant: "destructive" });
+    } finally {
+        setIsExporting(false);
+    }
+  };
   
   return (
     <TooltipProvider>
@@ -353,10 +447,16 @@ export default function InventoryPage() {
                 </p>
             </div>
             { (userRole === 'Admin' || userRole === 'Operador') && (
+              <>
+                <Button variant="outline" onClick={handleExportInventory}>
+                  <FileDown className="mr-2 h-4 w-4" />
+                  Exportar Qtd. Itens
+                </Button>
                 <Button onClick={() => setIsAddSheetOpen(true)} className="w-full sm:w-auto">
                     <PlusCircle className="mr-2" />
                     Adicionar Novo Item
                 </Button>
+              </>
             )}
         </div>
 
@@ -373,7 +473,7 @@ export default function InventoryPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="border rounded-md">
+            <div className="hidden md:block border rounded-md">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -476,6 +576,89 @@ export default function InventoryPage() {
                   )}
                 </TableBody>
               </Table>
+            </div>
+            {/* --- VISUALIZAÇÃO PARA MOBILE (CARDS) --- */}
+            <div className="md:hidden space-y-4">
+              {isLoading ? (
+                <div className="text-center text-muted-foreground p-4">Carregando...</div>
+              ) : products.length > 0 ? (
+                products.map((product) => {
+                  const expirationStatus = getExpirationStatus(product.calculatedExpirationDate);
+                  const tooltipText = getTooltipText(expirationStatus, product.calculatedExpirationDate || '');
+                  return (
+                    <Card key={product.id}>
+                      <CardHeader>
+                        <div className="flex gap-4">
+                          <Image
+                            src={product.image || "https://placehold.co/64x64.png"}
+                            alt={product.name}
+                            width={64}
+                            height={64}
+                            className="rounded-md object-cover aspect-square"
+                          />
+                          <div className="flex-1">
+                            <CardTitle className="text-base">{product.name}</CardTitle>
+                            <CardDescription>Cód.: {product.code}</CardDescription>
+                            <Sheet>
+                              <SheetTrigger asChild>
+                                  <Button aria-haspopup="true" size="icon" variant="ghost">
+                                      <MoreHorizontal className="h-5 w-5" />
+                                      <span className="sr-only">Toggle menu</span>
+                                  </Button>
+                              </SheetTrigger>
+                              <SheetContent side="bottom">
+                                  <SheetHeader className="mb-4">
+                                      <SheetTitle>{product.name}</SheetTitle>
+                                  </SheetHeader>
+                                  <div className="flex flex-col gap-2">
+                                      <Button variant="outline" className="justify-start" onClick={() => { setSelectedItem(product); setIsMovementsSheetOpen(true); }}>
+                                          <History className="mr-2 h-4 w-4" />
+                                          Ver Movimentações
+                                      </Button>
+                                      {userRole === 'Admin' && (
+                                          <>
+                                              <Button variant="outline" className="justify-start" onClick={() => {
+                                                  setActionToConfirm(() => () => {
+                                                      setSelectedItem(product);
+                                                      setIsEditSheetOpen(true);
+                                                  });
+                                                  setIsReauthOpen(true);
+                                              }}>
+                                                  <Edit className="mr-2 h-4 w-4" />
+                                                  Editar Item
+                                              </Button>
+                                              <Button variant="destructive" className="justify-start" onClick={() => {
+                                                  setActionToConfirm(() => () => handleDeleteItem(product.id));
+                                                  setIsReauthOpen(true);
+                                              }}>
+                                                  <Trash2 className="mr-2 h-4 w-4" />
+                                                  Excluir Item
+                                              </Button>
+                                          </>
+                                      )}
+                                  </div>
+                              </SheetContent>
+                            </Sheet>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="text-sm text-muted-foreground space-y-2">
+                        <div className="flex justify-between"><strong>Estoque:</strong> <span>{product.quantity} {product.unit}</span></div>
+                        <div className="flex justify-between"><strong>Tipo:</strong> <Badge variant={product.type === 'permanente' ? 'secondary' : 'outline'}>{product.type}</Badge></div>
+                        <div className="flex justify-between"><strong>Categoria:</strong> <span>{product.category}</span></div>
+                      </CardContent>
+                        
+                      {expirationStatus && (
+                        <CardFooter>
+                           <Badge variant="destructive" className="w-full justify-center">{tooltipText}</Badge>
+                        </CardFooter>
+                      )}
+                    </Card>
+                  )
+                })
+              ) : (
+                <div className="text-center text-muted-foreground p-4">Nenhum produto encontrado.</div>
+              )}
             </div>
           </CardContent>
         </Card>
