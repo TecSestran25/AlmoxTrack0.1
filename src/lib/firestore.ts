@@ -228,6 +228,23 @@ export const getRequestsForUser = async (
   return { requests, lastDoc };
 };
 
+export const getProductById = async (productId: string): Promise<Product | null> => {
+    try {
+        const productRef = doc(db, "products", productId);
+        const docSnap = await getDoc(productRef);
+
+        if (docSnap.exists()) {
+            // Retorna os dados do documento junto com seu ID
+            return { ...docSnap.data(), id: docSnap.id } as Product;
+        } else {
+            console.warn(`Produto com ID ${productId} não encontrado.`);
+            return null;
+        }
+    } catch (error) {
+        console.error("Erro ao buscar produto por ID:", error);
+        throw error;
+    }
+};
 
 export const searchProducts = async (filters: ProductFilters = {}): Promise<Product[]> => {
   const { searchTerm, materialType } = filters;

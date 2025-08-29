@@ -1,147 +1,114 @@
 "use client";
 
 import * as React from "react";
-import { Calendar as CalendarIcon, Trash2 } from "lucide-react";
+import { useSearchParams, useRouter } from 'next/navigation';
+import { Calendar as CalendarIcon, Trash2, Edit } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 import { Button } from "@/components/ui/button";
-import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table";
-import {
-    Popover,
-    PopoverContent,
-    PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
-import { useAuth } from "@/contexts/AuthContext";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import type { Product } from "@/lib/firestore";
-import { useSearchParams, useRouter } from 'next/navigation';
-import { finalizeExit } from "@/lib/firestore";
+import { finalizeExit, getProductById } from "@/lib/firestore";
 import { ItemSearch } from "../../components/item-search";
+import { useAuth } from "@/contexts/AuthContext";
 
 type RequestedItem = {
     id: string;
     name: string;
-    quantity: number;
+    quantity: number; // A quantidade que o usuário quer
     unit: string;
     isPerishable?: 'Sim' | 'Não';
     expirationDate?: string;
+    // 👇 Guarda uma "foto" do produto original no momento da adição
+    originalProduct: Product; 
 };
 
-type RequestDataFromUrl = {
-    requester: string;
-    department: string;
-    purpose?: string;
-    items: RequestedItem[];
-};
+// Componente Wrapper para Suspense, caso use useSearchParams
+export default function ConsumptionRequestPage() {
+    return (
+        <React.Suspense fallback={<div className="p-8 text-center">Carregando...</div>}>
+            <ConsumptionRequestForm />
+        </React.Suspense>
+    )
+}
 
-export default function ConsumptionRequestForm() {
+function ConsumptionRequestForm() {
     const { toast } = useToast();
     const router = useRouter();
     const searchParams = useSearchParams();
+    const { user } = useAuth();
 
+    // Estados do Formulário
     const [requestDate, setRequestDate] = React.useState<Date | undefined>(new Date());
     const [requesterName, setRequesterName] = React.useState("");
     const [requesterId, setRequesterId] = React.useState("");
     const [department, setDepartment] = React.useState("");
     const [purpose, setPurpose] = React.useState("");
-    const [quantity, setQuantity] = React.useState(1);
-    const [requestedItems, setRequestedItems] = React.useState<RequestedItem[]>([]);
-    const [selectedItem, setSelectedItem] = React.useState<Product | null>(null);
     const [isFinalizing, setIsFinalizing] = React.useState(false);
     const [requestId, setRequestId] = React.useState<string | null>(null);
-
-    const { user, loading: userLoading } = useAuth();
     
-    const isInitialLoad = React.useRef(true);
+    // Estados da Lista de Itens
+    const [requestedItems, setRequestedItems] = React.useState<RequestedItem[]>([]);
+    const [selectedItem, setSelectedItem] = React.useState<Product | null>(null);
+    const [quantity, setQuantity] = React.useState(1);
 
     React.useEffect(() => {
         const requestDataParam = searchParams.get('requestData');
-        const requestIdParam = searchParams.get('requestId'); // Captura o ID da requisição
-
-        if (requestIdParam) {
-            setRequestId(requestIdParam);
-        }
+        const requestIdParam = searchParams.get('requestId');
+        if (requestIdParam) setRequestId(requestIdParam);
 
         if (requestDataParam) {
             try {
-                const decodedData = atob(requestDataParam);
-                const parsedData = JSON.parse(decodedData);
-                
-                const requesterMatch = parsedData.requester.match(/(.*) \((.*)\)/);
+                const decodedData = JSON.parse(atob(requestDataParam));
+                const requesterMatch = decodedData.requester.match(/(.*) \((.*)\)/);
                 if (requesterMatch) {
                     setRequesterName(requesterMatch[1]);
                     setRequesterId(requesterMatch[2]);
                 } else {
-                    setRequesterName(parsedData.requester);
+                    setRequesterName(decodedData.requester);
                 }
-                
-                setDepartment(parsedData.department);
-                setPurpose(parsedData.purpose || '');
-                setRequestedItems(parsedData.items);
-                
-                // Limpa a URL para evitar recarregamento dos dados
+                setDepartment(decodedData.department);
+                setPurpose(decodedData.purpose || '');
+                // Adapta os itens da URL para o novo formato com 'originalProduct'
+                setRequestedItems(decodedData.items.map((item: any) => ({...item, originalProduct: item})));
                 window.history.replaceState({}, document.title, window.location.pathname);
             } catch (error) {
                 console.error("Erro ao decodificar dados da URL:", error);
-                toast({
-                    title: "Erro",
-                    description: "Não foi possível carregar os dados da requisição.",
-                    variant: "destructive",
-                });
+                toast({ title: "Erro", description: "Não foi possível carregar os dados da requisição.", variant: "destructive" });
             }
         }
-    }, [searchParams, toast]);
+    }, [searchParams, toast]);
 
     const handleAddItem = () => {
         if (!selectedItem) {
             toast({ title: "Erro", description: "Por favor, busque e selecione um item.", variant: "destructive" });
             return;
         }
-
         if (quantity <= 0) {
-            toast({ title: "Quantidade inválida", description: "A quantidade deve ser maior que zero.", variant: "destructive" });
+            toast({ title: "Quantidade inválida", variant: "destructive" });
             return;
         }
 
-        if (selectedItem.quantity < quantity) {
-            toast({ title: "Estoque insuficiente", description: `A quantidade solicitada (${quantity}) é maior que a disponível (${selectedItem.quantity}).`, variant: "destructive" });
+        const existingItem = requestedItems.find((i) => i.id === selectedItem.id);
+        const currentRequestedQty = existingItem ? existingItem.quantity : 0;
+        
+        if (selectedItem.quantity < currentRequestedQty + quantity) {
+            toast({ title: "Estoque insuficiente", description: `A quantidade total solicitada (${currentRequestedQty + quantity}) é maior que a disponível (${selectedItem.quantity}).`, variant: "destructive" });
             return;
         }
 
         setRequestedItems((prev) => {
-            const existing = prev.find((i) => i.id === selectedItem.id);
-            if (existing) {
-                const newQuantity = existing.quantity + quantity;
-                if (selectedItem.quantity < newQuantity) {
-                    toast({ title: "Estoque insuficiente", description: `A quantidade total solicitada (${newQuantity}) é maior que a disponível (${selectedItem.quantity}).`, variant: "destructive" });
-                    return prev;
-                }
-                return prev.map((i) => i.id === selectedItem.id ? { ...i, quantity: newQuantity } : i);
+            if (existingItem) {
+                return prev.map((i) => i.id === selectedItem.id ? { ...i, quantity: i.quantity + quantity } : i);
             }
             return [...prev, {
                 id: selectedItem.id,
@@ -150,6 +117,7 @@ export default function ConsumptionRequestForm() {
                 unit: selectedItem.unit,
                 isPerishable: selectedItem.isPerishable,
                 expirationDate: selectedItem.expirationDate,
+                originalProduct: selectedItem,
             }];
         });
 
@@ -161,18 +129,52 @@ export default function ConsumptionRequestForm() {
         setRequestedItems(prev => prev.filter(item => item.id !== itemId));
     };
 
+    const handleEditClick = async (itemToEdit: RequestedItem) => {
+        toast({ title: "Carregando dados atualizados do item..." });
+        try {
+            const liveProductData = await getProductById(itemToEdit.id);
+
+            if (!liveProductData) {
+                toast({
+                    title: "Erro ao carregar item",
+                    description: "Não foi possível encontrar os dados atualizados deste item no inventário.",
+                    variant: "destructive"
+                });
+                return;
+            }
+            setSelectedItem(null);
+            setSelectedItem(liveProductData);
+            
+            setQuantity(itemToEdit.quantity);
+
+            handleRemoveItem(itemToEdit.id);
+
+            toast({
+                title: "Item pronto para edição",
+                description: `Ajuste a quantidade de "${itemToEdit.name}" e adicione novamente.`
+            });
+
+        } catch (error) {
+            toast({
+                title: "Erro de Conexão",
+                description: "Não foi possível buscar os dados do item. Verifique sua conexão.",
+                variant: "destructive"
+            });
+        }
+    };
+    
     const handleFinalizeIssue = async () => {
-        if (requestedItems.length === 0) {
-            toast({ title: "Nenhum item solicitado", variant: "destructive" });
-            return;
-        }
-        if (!requesterName || !department) {
-            toast({ title: "Campos obrigatórios", description: "Nome e departamento são obrigatórios.", variant: "destructive" });
-            return;
-        }
-        
-        setIsFinalizing(true);
-        try {
+        if (requestedItems.length === 0) {
+            toast({ title: "Nenhum item solicitado", variant: "destructive" });
+            return;
+        }
+        if (!requesterName || !department) {
+            toast({ title: "Campos obrigatórios", variant: "destructive" });
+            return;
+        }
+        
+        setIsFinalizing(true);
+        try {
             const exitData = {
                 items: requestedItems,
                 date: requestDate?.toISOString() || new Date().toISOString(),
@@ -182,17 +184,13 @@ export default function ConsumptionRequestForm() {
                 responsible: user?.email || "Desconhecido",
             };
 
-            // 👇 AQUI A MÁGICA ACONTECE 👇
-            // Passamos o requestId (se existir) para a função finalizeExit
-            await finalizeExit(exitData, requestId || undefined);
-            
-            toast({ title: "Saída Registrada!", description: "A saída de materiais foi registrada com sucesso.", variant: "success" });
+            await finalizeExit(exitData, requestId || undefined);
             
-            // Se veio de uma requisição, redireciona de volta para a tela de gerenciamento
+            toast({ title: "Saída Registrada!", variant: "success" });
+            
             if (requestId) {
                 router.push('/dashboard/requests-management');
             } else {
-                // Limpa o formulário para uma nova saída manual
                 setRequestDate(new Date());
                 setRequesterName("");
                 setRequesterId("");
@@ -201,16 +199,16 @@ export default function ConsumptionRequestForm() {
                 setRequestedItems([]);
             }
 
-        } catch (error: any) {
-            toast({
-                title: "Erro ao Finalizar Saída",
-                description: error.message || "Não foi possível registrar a saída.",
-                variant: "destructive"
-            });
-        } finally {
-            setIsFinalizing(false);
-        }
-    };
+        } catch (error: any) {
+            toast({
+                title: "Erro ao Finalizar Saída",
+                description: error.message || "Não foi possível registrar a saída.",
+                variant: "destructive"
+            });
+        } finally {
+            setIsFinalizing(false);
+        }
+    };
 
     return (
         <Card>
@@ -269,7 +267,6 @@ export default function ConsumptionRequestForm() {
                         <label htmlFor="purpose" className="text-sm font-medium">Finalidade de Uso</label>
                         <Textarea id="purpose" value={purpose} onChange={e => setPurpose(e.target.value)} />
                     </div>
-
                     <Card>
                         <CardHeader>
                             <CardTitle>Itens Solicitados</CardTitle>
@@ -277,7 +274,7 @@ export default function ConsumptionRequestForm() {
                                 <ItemSearch onSelectItem={setSelectedItem} placeholder="Buscar item disponível..." searchId="consumption-search" />
                                 <div className="w-full md:w-24">
                                     <label htmlFor="quantity-consumption" className="text-sm font-medium">Qtd.</label>
-                                    <Input id="quantity-consumption" type="number" value={quantity} onChange={e => setQuantity(Number(e.target.value))} min="1" />
+                                    <Input id="quantity-consumption" type="number" value={quantity} onChange={e => setQuantity(Number(e.target.value))} min="1"/>
                                 </div>
                                 <Button onClick={handleAddItem} className="w-full md:w-auto">Adicionar</Button>
                             </div>
@@ -295,30 +292,34 @@ export default function ConsumptionRequestForm() {
                                             <TableHead>Item</TableHead>
                                             <TableHead>Validade</TableHead>
                                             <TableHead className="w-[100px] text-right">Qtd</TableHead>
-                                            <TableHead className="w-[100px] text-center">Ação</TableHead>
+                                            <TableHead className="w-[120px] text-center">Ações</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                         {requestedItems.length === 0 ? (
-                                             <TableRow>
-                                                 <TableCell colSpan={4} className="text-center text-muted-foreground">
-                                                     Nenhum item solicitado.
-                                                 </TableCell>
-                                             </TableRow>
-                                         ) : (
+                                        {requestedItems.length === 0 ? (
+                                            <TableRow>
+                                                <TableCell colSpan={4} className="text-center text-muted-foreground">Nenhum item solicitado.</TableCell>
+                                            </TableRow>
+                                        ) : (
                                             requestedItems.map(item => (
                                                 <TableRow key={item.id}>
                                                     <TableCell className="font-medium">{item.name}</TableCell>
                                                     <TableCell>{item.expirationDate ? format(parseISO(item.expirationDate), 'dd/MM/yyyy') : 'N/A'}</TableCell>
                                                     <TableCell className="text-right">{`${item.quantity} ${item.unit}`}</TableCell>
                                                     <TableCell className="text-center">
-                                                        <Button variant="ghost" size="icon" className="text-red-600 hover:bg-red-100" onClick={() => handleRemoveItem(item.id)}>
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
+                                                        <div className="flex justify-center items-center gap-1">
+                                                            {/* BOTÃO DE EDITAR CHAMA A NOVA FUNÇÃO SIMPLES */}
+                                                            <Button variant="ghost" size="icon" className="text-blue-600 hover:bg-blue-100" onClick={() => handleEditClick(item)}>
+                                                                <Edit className="h-4 w-4" />
+                                                            </Button>
+                                                            <Button variant="ghost" size="icon" className="text-red-600 hover:bg-red-100" onClick={() => handleRemoveItem(item.id)}>
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </Button>
+                                                        </div>
                                                     </TableCell>
                                                 </TableRow>
                                             ))
-                                         )}
+                                        )}
                                     </TableBody>
                                 </Table>
                             </div>
