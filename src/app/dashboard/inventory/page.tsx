@@ -272,7 +272,7 @@ export default function InventoryPage() {
       if (selectedItem.type !== updateData.type) changes.push(`Tipo: de '${selectedItem.type}' para '${updateData.type}'`);
       if (selectedItem.patrimony !== updateData.patrimony) changes.push(`Patrimônio: de '${selectedItem.patrimony || "N/A"}' para '${updateData.patrimony || "N/A"}'`);
       if (selectedItem.unit !== updateData.unit) changes.push(`Unidade: de '${selectedItem.unit}' para '${updateData.unit}'`);
-      if (selectedItem.quantity !== updateData.quantity) changes.push(`Unidade: de '${selectedItem.quantity}' para '${updateData.quantity}'`);
+      if (selectedItem.quantity !== updateData.quantity) changes.push(`Quantidade: de '${selectedItem.quantity}' para '${updateData.quantity}'`);
       if (selectedItem.category !== updateData.category) changes.push(`Categoria: de '${selectedItem.category}' para '${updateData.category}'`);
       if (selectedItem.reference !== updateData.reference) changes.push(`Referência: de '${selectedItem.reference || "N/A"}' para '${updateData.reference || "N/A"}'`);
       if (imageUrl !== selectedItem.image) changes.push('Imagem foi alterada.');
