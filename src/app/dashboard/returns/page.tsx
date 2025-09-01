@@ -196,6 +196,7 @@ export default function ReturnsPage() {
                                         <SelectItem value="Transporte">Gerência de transporte</SelectItem>
                                         <SelectItem value="Engenharia">Setor de engenharia</SelectItem>
                                         <SelectItem value="Limpeza">Limpeza</SelectItem>
+                                        <SelectItem value="Copa">Copa</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
