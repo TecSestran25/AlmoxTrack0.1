@@ -47,9 +47,11 @@ import {
     DropdownMenuPortal,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
-import { auth } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
 import Image from "next/image";
 import { useTheme } from "next-themes";
 
@@ -62,15 +64,45 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
     const { setTheme } = useTheme();
     const { theme } = useTheme();
 
-    const logoSrc = theme === 'dark' || 'system' ? "/LOGO_branco.png" : "/LOGO.png";
-    
+    const logoSrc = theme === 'dark' ? "/LOGO_branco.png" : "/LOGO.png";
+
+    const [pendingRequestsCount, setPendingRequestsCount] = React.useState(0);
+
     const allowedPathsByRole = React.useMemo(() => ({
         Requester: ["/dashboard/inventory", "/dashboard/request", "/dashboard/list_requests"],
         Operador: ["/dashboard", "/dashboard/inventory", "/dashboard/entry", "/dashboard/exit", "/dashboard/returns", "/dashboard/requests-management"],
-        Admin: ["/dashboard", "/dashboard/inventory", "/dashboard/entry", "/dashboard/exit", "/dashboard/returns", "/dashboard/requests-management", "/dashboard/list_requests"],
+        Admin: ["/dashboard", "/dashboard/inventory", "/dashboard/entry", "/dashboard/exit", "/dashboard/returns", "/dashboard/requests-management"],
     }), []);
     
     const [isVerificationComplete, setIsVerificationComplete] = React.useState(false);
+
+    React.useEffect(() => {
+        if (userRole === 'Admin' || userRole === 'Operador') {
+            const requestsCollection = collection(db, "requests");
+            const q = query(requestsCollection, where('status', '==', 'pending'));
+
+            const unsubscribe = onSnapshot(q, (snapshot) => {
+                setPendingRequestsCount(snapshot.size);
+                snapshot.docChanges().forEach((change) => {
+                    if (change.type === "added") {
+                        const newRequest = change.doc.data();
+                        const requestDate = newRequest.date ? new Date(newRequest.date) : new Date(0);
+                        const now = new Date();
+                        const fiveSecondsAgo = new Date(now.getTime() - 5000);
+                        
+                        if(requestDate > fiveSecondsAgo) {
+                            toast({
+                                title: "Nova Requisição Recebida!",
+                                description: `${newRequest.requester} do setor ${newRequest.department} fez uma nova solicitação.`,
+                                duration: 10000,
+                            });
+                        }
+                    }
+                });
+            });
+            return () => unsubscribe();
+        }
+    }, [userRole, toast]);
 
     React.useEffect(() => {
         if (!loading && user && userRole) {
@@ -105,7 +137,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
         { href: "/dashboard/returns", icon: IterationCcw, label: "Devolução", roles: ["Admin", "Operador"] },
         { href: "/dashboard/request", icon: MailPlus, label: "Requisições", roles: ["Requester"] },
         { href: "/dashboard/requests-management", icon: Mailbox, label: "Gerenciar Requisições", roles: ["Admin", "Operador"] },
-        { href: "/dashboard/list_requests", icon: ListChecks, label: "Minhas Requisições", roles: ["Admin", "Requester"] },
+        { href: "/dashboard/list_requests", icon: ListChecks, label: "Minhas Requisições", roles: ["Requester"] },
     ];
 
     const allowedItems = React.useMemo(() => {
@@ -130,9 +162,6 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
             });
         }
     };
-
-    
-
 
     if (loading || !user || !isVerificationComplete) {
         return (
@@ -168,12 +197,20 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                                     tooltip={item.label}
                                     className="h-12 justify-start"
                                 >
-                                    <Link href={item.href}>
-                                        <item.icon />
-                                        <span>{item.label}</span>
+                                    <Link href={item.href} className="flex items-center justify-between w-full">
+                                        <div className="flex items-center">
+                                            <item.icon className="mr-2 h-5 w-5" /> 
+                                            <span>{item.label}</span>
+                                        </div>
+                                        {/* --- MOSTRAR O BADGE DE CONTAGEM --- */}
+                                        {item.href === "/dashboard/requests-management" && pendingRequestsCount > 0 && (
+                                            <Badge className="ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded-full">
+                                                {pendingRequestsCount}
+                                            </Badge>
+                                        )}
                                     </Link>
                                 </SidebarMenuButton>
-                                </SidebarMenuItem>
+                            </SidebarMenuItem>
                         ))}
                     </SidebarMenu>
                 </SidebarContent>
@@ -218,10 +255,6 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                                             <Moon className="mr-2 h-4 w-4" />
                                             <span>Escuro</span>
                                         </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => setTheme("system")}>
-                                            <MonitorSmartphone className="mr-2 h-4 w-4" />
-                                            <span>Sistema</span>
-                                        </DropdownMenuItem>
                                     </DropdownMenuSubContent>
                                 </DropdownMenuPortal>
                             </DropdownMenuSub>
@@ -265,10 +298,6 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                                         <DropdownMenuItem onClick={() => setTheme("dark")}>
                                             <Moon className="mr-2 h-4 w-4" />
                                             <span>Escuro</span>
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => setTheme("system")}>
-                                            <MonitorSmartphone className="mr-2 h-4 w-4" />
-                                            <span>Sistema</span>
                                         </DropdownMenuItem>
                                     </DropdownMenuSubContent>
                                 </DropdownMenuPortal>

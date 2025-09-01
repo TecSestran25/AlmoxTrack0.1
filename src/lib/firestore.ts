@@ -197,7 +197,6 @@ export interface PaginatedRequests {
   lastDoc: DocumentSnapshot<DocumentData> | null;
 }
 
-// Substitua a função getRequestsForUser existente por esta
 export const getRequestsForUser = async (
   uid: string, 
   pageSize: number, 
@@ -228,6 +227,22 @@ export const getRequestsForUser = async (
   return { requests, lastDoc };
 };
 
+export const getProductById = async (productId: string): Promise<Product | null> => {
+    try {
+        const productRef = doc(db, "products", productId);
+        const docSnap = await getDoc(productRef);
+
+        if (docSnap.exists()) {
+            return { ...docSnap.data(), id: docSnap.id } as Product;
+        } else {
+            console.warn(`Produto com ID ${productId} não encontrado.`);
+            return null;
+        }
+    } catch (error) {
+        console.error("Erro ao buscar produto por ID:", error);
+        throw error;
+    }
+};
 
 export const searchProducts = async (filters: ProductFilters = {}): Promise<Product[]> => {
   const { searchTerm, materialType } = filters;
@@ -291,22 +306,33 @@ export type ImageObject = {
     contentType: string;
 };
 
-export const uploadImage = async (imageObject: ImageObject) => {
-    if (!imageObject || !imageObject.base64) {
-      return "https://placehold.co/40x40.png";
+export const uploadImage = async (imageObject: ImageObject): Promise<string> => {
+  if (!imageObject || !imageObject.base64) {
+    return "https://placehold.co/40x40.png";
+  }
+  try {
+    const response = await fetch('/api/upload', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        base64: imageObject.base64,
+        fileName: imageObject.fileName,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Falha no upload da imagem para o servidor.');
     }
-    try {
-      const { base64, fileName, contentType } = imageObject;
-      const storage = getStorage();
-      const storageRef = ref(storage, `products/${Date.now()}_${fileName}`);
-      const metadata = { contentType: contentType };
-      const snapshot = await uploadString(storageRef, base64, 'data_url', metadata);
-      const downloadURL = await getDownloadURL(snapshot.ref);
-      return downloadURL;
-    } catch (error) {
-      console.error("Erro ao fazer upload da imagem com Base64:", error);
-      throw error;
-    }
+
+    const { url } = await response.json();
+    return url;
+  } catch (error) {
+    console.error("Erro ao fazer upload da imagem via API:", error);
+    throw error;
+  }
 };
 
 export const generateNextItemCode = async (prefix: string): Promise<string> => {
@@ -430,7 +456,6 @@ export const finalizeExit = async (exitData: ExitData, requestId?: string): Prom
             const productUpdates = new Map();
             const movementExits = [];
 
-            // Esta parte continua a mesma: prepara as atualizações de estoque e movimentações
             for (let i = 0; i < exitData.items.length; i++) {
                 const item = exitData.items[i];
                 const productDoc = productDocs[i];
@@ -459,21 +484,16 @@ export const finalizeExit = async (exitData: ExitData, requestId?: string): Prom
                 };
                 movementExits.push(movementData);
             }
-            
-            // Aplica as atualizações de estoque
+
             for (const [ref, data] of productUpdates.entries()) {
                 transaction.update(ref, data);
             }
 
-            // Cria os novos documentos de movimentação
             for (const data of movementExits) {
                 const movementRef = doc(collection(db, "movements"));
                 transaction.set(movementRef, data);
             }
 
-            // -----------------------------------------------------------------
-            // 👇 NOVA LÓGICA ADICIONADA: Atualiza o status da requisição original 👇
-            // -----------------------------------------------------------------
             if (requestId) {
                 const requestRef = doc(db, "requests", requestId);
                 transaction.update(requestRef, {
@@ -483,8 +503,7 @@ export const finalizeExit = async (exitData: ExitData, requestId?: string): Prom
                 });
             }
         });
-        
-        // Esta parte, que fica FORA da transação, continua a mesma
+
         for (const item of exitData.items) {
             await findAndSetNewExpirationDate(item.id);
         }
@@ -610,11 +629,26 @@ export const rejectRequest = async (requestId: string, responsible: string, reas
       status: 'rejected',
       rejectedBy: responsible,
       rejectionDate: new Date().toISOString(),
-      rejectionReason: reason // <-- SALVANDO O MOTIVO
+      rejectionReason: reason
   });
 };
 
 export const createRequest = async (requestData: Omit<RequestData, 'id' | 'status'>): Promise<string> => {
     const docRef = await addDoc(requestsCollection, { ...requestData, status: 'pending' });
     return docRef.id;
+};
+
+export const deleteRequest = async (requestId: string, userId: string): Promise<void> => {
+    const requestRef = doc(db, "requests", requestId);
+
+    const requestSnap = await getDoc(requestRef);
+    if (!requestSnap.exists() || requestSnap.data().requestedByUid !== userId) {
+        throw new Error("Você não tem permissão para cancelar esta requisição.");
+    }
+
+    if (requestSnap.data().status !== 'pending') {
+        throw new Error("Não é possível cancelar uma requisição que já foi processada.");
+    }
+
+    await deleteDoc(requestRef);
 };
