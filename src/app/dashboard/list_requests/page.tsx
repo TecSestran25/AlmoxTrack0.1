@@ -113,7 +113,7 @@ export default function MyRequestsPage() {
   const handleDeleteRequest = async (requestId: string) => {
     if (!user?.uid) return;
     
-    setIsDeleting(requestId); // Ativa o loading para este item
+    setIsDeleting(requestId);
     try {
         await deleteRequest(requestId, user.uid);
         toast({
@@ -121,7 +121,6 @@ export default function MyRequestsPage() {
             description: "Sua requisição foi cancelada com sucesso.",
             variant: "success"
         });
-        // Recarrega os dados da página atual para remover o item da lista
         fetchRequests(currentPage, pageCursors[currentPage - 1]);
     } catch (error: any) {
         toast({
@@ -130,7 +129,7 @@ export default function MyRequestsPage() {
             variant: "destructive"
         });
     } finally {
-        setIsDeleting(null); // Desativa o loading
+        setIsDeleting(null);
     }
   };
 

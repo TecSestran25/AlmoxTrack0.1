@@ -24,15 +24,13 @@ import { useAuth } from "@/contexts/AuthContext";
 type RequestedItem = {
     id: string;
     name: string;
-    quantity: number; // A quantidade que o usuário quer
+    quantity: number;
     unit: string;
     isPerishable?: 'Sim' | 'Não';
     expirationDate?: string;
-    // 👇 Guarda uma "foto" do produto original no momento da adição
     originalProduct: Product; 
 };
 
-// Componente Wrapper para Suspense, caso use useSearchParams
 export default function ConsumptionRequestPage() {
     return (
         <React.Suspense fallback={<div className="p-8 text-center">Carregando...</div>}>

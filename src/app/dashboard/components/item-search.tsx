@@ -38,10 +38,8 @@ export function ItemSearch({ onSelectItem, materialType, placeholder, searchId, 
     setIsLoading(true);
     setNoResults(false);
     try {
-      // 👇 A MUDANÇA PRINCIPAL É AQUI: Usando searchProducts
       const productsFromDb = await searchProducts({ searchTerm: term, materialType });
       
-      // Como searchProducts retorna um array, o resto do código funciona!
       setSearchResults(productsFromDb);
       setIsSearchOpen(true);
       if (productsFromDb.length === 0) {

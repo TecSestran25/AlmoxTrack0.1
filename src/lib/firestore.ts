@@ -197,7 +197,6 @@ export interface PaginatedRequests {
   lastDoc: DocumentSnapshot<DocumentData> | null;
 }
 
-// Substitua a função getRequestsForUser existente por esta
 export const getRequestsForUser = async (
   uid: string, 
   pageSize: number, 
@@ -234,7 +233,6 @@ export const getProductById = async (productId: string): Promise<Product | null>
         const docSnap = await getDoc(productRef);
 
         if (docSnap.exists()) {
-            // Retorna os dados do documento junto com seu ID
             return { ...docSnap.data(), id: docSnap.id } as Product;
         } else {
             console.warn(`Produto com ID ${productId} não encontrado.`);
@@ -310,7 +308,7 @@ export type ImageObject = {
 
 export const uploadImage = async (imageObject: ImageObject): Promise<string> => {
   if (!imageObject || !imageObject.base64) {
-    return "https://placehold.co/40x40.png"; // Retorna um placeholder se não houver imagem
+    return "https://placehold.co/40x40.png";
   }
   try {
     const response = await fetch('/api/upload', {
@@ -333,7 +331,6 @@ export const uploadImage = async (imageObject: ImageObject): Promise<string> => 
     return url;
   } catch (error) {
     console.error("Erro ao fazer upload da imagem via API:", error);
-    // Em caso de falha, você pode optar por retornar um placeholder ou lançar o erro
     throw error;
   }
 };
@@ -459,7 +456,6 @@ export const finalizeExit = async (exitData: ExitData, requestId?: string): Prom
             const productUpdates = new Map();
             const movementExits = [];
 
-            // Esta parte continua a mesma: prepara as atualizações de estoque e movimentações
             for (let i = 0; i < exitData.items.length; i++) {
                 const item = exitData.items[i];
                 const productDoc = productDocs[i];
@@ -488,21 +484,16 @@ export const finalizeExit = async (exitData: ExitData, requestId?: string): Prom
                 };
                 movementExits.push(movementData);
             }
-            
-            // Aplica as atualizações de estoque
+
             for (const [ref, data] of productUpdates.entries()) {
                 transaction.update(ref, data);
             }
 
-            // Cria os novos documentos de movimentação
             for (const data of movementExits) {
                 const movementRef = doc(collection(db, "movements"));
                 transaction.set(movementRef, data);
             }
 
-            // -----------------------------------------------------------------
-            // 👇 NOVA LÓGICA ADICIONADA: Atualiza o status da requisição original 👇
-            // -----------------------------------------------------------------
             if (requestId) {
                 const requestRef = doc(db, "requests", requestId);
                 transaction.update(requestRef, {
@@ -512,8 +503,7 @@ export const finalizeExit = async (exitData: ExitData, requestId?: string): Prom
                 });
             }
         });
-        
-        // Esta parte, que fica FORA da transação, continua a mesma
+
         for (const item of exitData.items) {
             await findAndSetNewExpirationDate(item.id);
         }

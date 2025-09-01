@@ -358,15 +358,13 @@ export default function InventoryPage() {
     toast({ title: "Gerando relatório...", description: "Buscando dados de produtos e movimentações. Isso pode levar um momento." });
 
     try {
-        // 1. Busca todos os produtos (sem paginação)
         const allProducts = await getAllProducts();
 
         if (allProducts.length === 0) {
             toast({ title: "Nenhum item para exportar", variant: "destructive" });
             return;
         }
-        
-        // 2. Reutiliza a lógica para calcular a data de validade mais próxima
+
         const productsWithExpiration = await Promise.all(allProducts.map(async product => {
             if (product.isPerishable === 'Sim') {
                 const movements = await getMovementsForProducts([product.id]);
@@ -387,8 +385,6 @@ export default function InventoryPage() {
             return { ...product, calculatedExpirationDate: undefined };
         }));
 
-
-        // 3. Monta o CSV com a nova coluna
         const escapeCsvCell = (cellData: any) => {
             const stringData = String(cellData || "");
             if (stringData.includes(',') || stringData.includes('"') || stringData.includes('\n')) {
@@ -396,8 +392,7 @@ export default function InventoryPage() {
             }
             return stringData;
         };
-        
-        // Adiciona a nova coluna "Validade Próxima"
+
         const headers = ["Código", "Nome", "Quantidade em Estoque", "Unidade", "Categoria", "Tipo", "Nº Patrimônio", "Referência", "Validade Próxima"];
         
         const rows = productsWithExpiration.map(p => [
@@ -409,11 +404,9 @@ export default function InventoryPage() {
             escapeCsvCell(p.type),
             escapeCsvCell(p.patrimony),
             escapeCsvCell(p.reference),
-            // Formata a data de validade calculada ou deixa em branco
             escapeCsvCell(p.calculatedExpirationDate ? format(parseISO(p.calculatedExpirationDate), 'dd/MM/yyyy') : 'N/A')
         ].join(','));
 
-        // 4. Gera e baixa o arquivo (sem alteração aqui)
         const csvContent = [headers.join(','), ...rows].join('\n');
         const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement("a");

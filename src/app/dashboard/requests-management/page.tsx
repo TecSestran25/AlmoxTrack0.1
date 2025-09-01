@@ -97,7 +97,7 @@ export default function RequestsManagementPage() {
         }
     };
 
-    const handleReject = async (requestId: string, reason: string) => { // <-- Recebe 'reason'
+    const handleReject = async (requestId: string, reason: string) => {
     if (!user || !user.email) {
         toast({ title: "Erro de autenticação", description: "Operador não identificado.", variant: "destructive" });
         return;
@@ -179,7 +179,6 @@ export default function RequestsManagementPage() {
                                                     variant="ghost"
                                                     size="icon"
                                                     className="text-red-600 hover:bg-red-100"
-                                                    // 👇 ALTERE ESTA LINHA 👇
                                                     onClick={() => setRequestToReject(request)} 
                                                     disabled={isProcessing === request.id}
                                                 >
