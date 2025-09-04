@@ -5,7 +5,7 @@ import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Check, X, Loader2, ArrowRight } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { 
+import {
     AlertDialog,
     AlertDialogAction,
     AlertDialogCancel,
@@ -43,25 +43,33 @@ export default function RequestsManagementPage() {
     const [isProcessing, setIsProcessing] = React.useState<string | null>(null);
     const [rejectionReason, setRejectionReason] = React.useState("");
     const [requestToReject, setRequestToReject] = React.useState<RequestData | null>(null);
-    const { user } = useAuth();
+    // 1. Obter o secretariaId do contexto
+    const { user, secretariaId } = useAuth();
     const { toast } = useToast();
     const router = useRouter();
 
     const fetchRequests = React.useCallback(async () => {
+        // 2. Guarda de segurança
+        if (!secretariaId) {
+            setIsLoading(false);
+            return;
+        }
         setIsLoading(true);
         try {
-            const requests = await getPendingRequests();
+            // 3. Passar o secretariaId para a função
+            const requests = await getPendingRequests(secretariaId);
             setPendingRequests(requests);
-        } catch (error) {
+        } catch (error: any) {
             toast({
                 title: "Erro ao carregar requisições",
-                description: "Não foi possível buscar as requisições pendentes.",
+                description: error.message,
                 variant: "destructive"
             });
         } finally {
             setIsLoading(false);
         }
-    }, [toast]);
+    // 4. Adicionar secretariaId como dependência
+    }, [toast, secretariaId]);
 
     React.useEffect(() => {
         fetchRequests();
@@ -69,6 +77,8 @@ export default function RequestsManagementPage() {
 
     const handleApproveAndRedirect = (request: RequestData) => {
         setIsProcessing(request.id);
+        // A lógica de codificar e redirecionar não precisa do secretariaId aqui,
+        // pois a página de 'exit' que receberá os dados já é multitenant.
         try {
             const exitData = {
                 requester: request.requester,
@@ -89,41 +99,44 @@ export default function RequestsManagementPage() {
             const firstItemType = request.items[0]?.type || 'consumo';
             const tabToOpen = firstItemType === 'permanente' ? 'responsibility' : 'consumption';
 
-            router.push(`/dashboard/exit?requestData=${encodedData}&requestId=${request.id}`);
+            // O requestId já é um identificador único global
+            router.push(`/dashboard/exit?tab=${tabToOpen}&requestData=${encodedData}&requestId=${request.id}`);
 
         } catch (error: any) {
-            toast({ title: "Erro ao preparar dados", description: "Não foi possível codificar os dados da requisição.", variant: "destructive" });
+            toast({ title: "Erro ao preparar dados", description: error.message, variant: "destructive" });
             setIsProcessing(null);
         }
     };
 
     const handleReject = async (requestId: string, reason: string) => {
-    if (!user || !user.email) {
-        toast({ title: "Erro de autenticação", description: "Operador não identificado.", variant: "destructive" });
-        return;
-    }
+        // 2. Guarda de segurança
+        if (!user?.email || !secretariaId) {
+            toast({ title: "Erro de autenticação", variant: "destructive" });
+            return;
+        }
 
-    if (!reason || !reason.trim()) {
-        toast({ title: "Motivo obrigatório", description: "É necessário fornecer um motivo para a rejeição.", variant: "destructive" });
-        return;
-    }
+        if (!reason || !reason.trim()) {
+            toast({ title: "Motivo obrigatório", variant: "destructive" });
+            return;
+        }
 
-    setIsProcessing(requestId);
-    try {
-        await rejectRequest(requestId, user.email, reason); 
+        setIsProcessing(requestId);
+        try {
+            // 3. Passar o secretariaId para a função
+            await rejectRequest(secretariaId, requestId, user.email, reason);
 
-        toast({ title: "Requisição Rejeitada!", description: "A requisição foi movida para o status de rejeitada.", variant: "default" });
-        setRequestToReject(null);
-        setRejectionReason("");
-        fetchRequests();
+            toast({ title: "Requisição Rejeitada!", variant: "default" });
+            setRequestToReject(null);
+            setRejectionReason("");
+            fetchRequests(); // Recarrega a lista de pendentes
 
-    } catch (error) {
-        toast({ title: "Erro ao Rejeitar", description: "Não foi possível rejeitar a requisição.", variant: "destructive" });
-    } finally {
-        setIsProcessing(null);
-    }
-};
-
+        } catch (error: any) {
+            toast({ title: "Erro ao Rejeitar", description: error.message, variant: "destructive" });
+        } finally {
+            setIsProcessing(null);
+        }
+    };
+    
     return (
         <div className="flex flex-col gap-6">
             <Card>
@@ -179,6 +192,7 @@ export default function RequestsManagementPage() {
                                                     variant="ghost"
                                                     size="icon"
                                                     className="text-red-600 hover:bg-red-100"
+                                                    // 👇 ALTERE ESTA LINHA 👇
                                                     onClick={() => setRequestToReject(request)} 
                                                     disabled={isProcessing === request.id}
                                                 >

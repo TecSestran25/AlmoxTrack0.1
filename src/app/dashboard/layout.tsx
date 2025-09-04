@@ -47,11 +47,11 @@ import {
     DropdownMenuPortal,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/badge"; // --- NOVO: Importe o Badge ---
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 import { auth, db } from "@/lib/firebase";
-import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { collection, query, where, onSnapshot } from "firebase/firestore"; // Removido Timestamp que não era usado
 import Image from "next/image";
 import { useTheme } from "next-themes";
 
@@ -65,7 +65,8 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
     const { theme } = useTheme();
 
     const logoSrc = theme === 'dark' ? "/LOGO_branco.png" : "/LOGO.png";
-
+    
+    // --- NOVO: Estado para contar as requisições pendentes ---
     const [pendingRequestsCount, setPendingRequestsCount] = React.useState(0);
 
     const allowedPathsByRole = React.useMemo(() => ({
@@ -76,19 +77,26 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
     
     const [isVerificationComplete, setIsVerificationComplete] = React.useState(false);
 
+    // --- LÓGICA DE NOTIFICAÇÃO E CONTAGEM ---
     React.useEffect(() => {
         if (userRole === 'Admin' || userRole === 'Operador') {
             const requestsCollection = collection(db, "requests");
+            // Agora a consulta busca TODAS as requisições pendentes
             const q = query(requestsCollection, where('status', '==', 'pending'));
 
             const unsubscribe = onSnapshot(q, (snapshot) => {
+                // Atualiza o estado com o número de documentos retornados
                 setPendingRequestsCount(snapshot.size);
+
+                // Lógica de notificação para NOVAS requisições continua a mesma
                 snapshot.docChanges().forEach((change) => {
                     if (change.type === "added") {
+                        // Para não notificar requisições antigas ao carregar a página,
+                        // podemos verificar se a data é recente.
                         const newRequest = change.doc.data();
                         const requestDate = newRequest.date ? new Date(newRequest.date) : new Date(0);
                         const now = new Date();
-                        const fiveSecondsAgo = new Date(now.getTime() - 5000);
+                        const fiveSecondsAgo = new Date(now.getTime() - 5000); // 5 segundos atrás
                         
                         if(requestDate > fiveSecondsAgo) {
                             toast({
@@ -100,9 +108,12 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                     }
                 });
             });
+
+            // Limpa o listener
             return () => unsubscribe();
         }
     }, [userRole, toast]);
+    // --- FIM DA LÓGICA ---
 
     React.useEffect(() => {
         if (!loading && user && userRole) {
@@ -255,6 +266,10 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                                             <Moon className="mr-2 h-4 w-4" />
                                             <span>Escuro</span>
                                         </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => setTheme("system")}>
+                                            <MonitorSmartphone className="mr-2 h-4 w-4" />
+                                            <span>Sistema</span>
+                                        </DropdownMenuItem>
                                     </DropdownMenuSubContent>
                                 </DropdownMenuPortal>
                             </DropdownMenuSub>
@@ -298,6 +313,10 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                                         <DropdownMenuItem onClick={() => setTheme("dark")}>
                                             <Moon className="mr-2 h-4 w-4" />
                                             <span>Escuro</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => setTheme("system")}>
+                                            <MonitorSmartphone className="mr-2 h-4 w-4" />
+                                            <span>Sistema</span>
                                         </DropdownMenuItem>
                                     </DropdownMenuSubContent>
                                 </DropdownMenuPortal>
