@@ -262,7 +262,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                         <DropdownMenuContent align="end" className="w-56">
                             <DropdownMenuLabel>Minha Conta</DropdownMenuLabel>
                             <DropdownMenuSeparator />
-                            {userRole === 'Admin' && (
+                            {userRole === 'Admin' || userRole === 'Operador' && (
                                 <DropdownMenuItem onClick={playNotificationSound}>
                                     <Bell className="mr-2 h-4 w-4" />
                                     <span>Ativar som</span>
