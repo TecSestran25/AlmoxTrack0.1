@@ -43,9 +43,8 @@ function ConsumptionRequestForm() {
     const { toast } = useToast();
     const router = useRouter();
     const searchParams = useSearchParams();
-    const { user, secretariaId } = useAuth(); // Obtenha o secretariaId
+    const { user, secretariaId } = useAuth();
 
-    // Estados do Formulário
     const [requestDate, setRequestDate] = React.useState<Date | undefined>(new Date());
     const [requesterName, setRequesterName] = React.useState("");
     const [requesterId, setRequesterId] = React.useState("");
@@ -54,7 +53,6 @@ function ConsumptionRequestForm() {
     const [isFinalizing, setIsFinalizing] = React.useState(false);
     const [requestId, setRequestId] = React.useState<string | null>(null);
     
-    // Estados da Lista de Itens
     const [requestedItems, setRequestedItems] = React.useState<RequestedItem[]>([]);
     const [selectedItem, setSelectedItem] = React.useState<Product | null>(null);
     const [quantity, setQuantity] = React.useState(1);
@@ -127,10 +125,9 @@ function ConsumptionRequestForm() {
     };
 
     const handleEditClick = async (itemToEdit: RequestedItem) => {
-        if (!secretariaId) return; // Guarda de segurança
+        if (!secretariaId) return;
         toast({ title: "Carregando dados atualizados do item..." });
         try {
-            // Passe o secretariaId para a função
             const liveProductData = await getProductById(secretariaId, itemToEdit.id);
 
             if (!liveProductData) {
@@ -171,7 +168,6 @@ function ConsumptionRequestForm() {
                 responsible: user.email || "Desconhecido",
             };
 
-            // Passe o secretariaId para a função
             await finalizeExit(secretariaId, exitData, requestId || undefined);
             
             toast({ title: "Saída Registrada!", variant: "success" });

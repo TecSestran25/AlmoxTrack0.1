@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import type { Product } from "@/lib/firestore";
 import { searchProducts } from "@/lib/firestore";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/contexts/AuthContext"; // Importar useAuth
+import { useAuth } from "@/contexts/AuthContext";
 
 interface ItemSearchProps {
   onSelectItem: (item: Product) => void;
@@ -16,7 +16,6 @@ interface ItemSearchProps {
   placeholder?: string;
   searchId: string;
   onRegisterNewItem?: () => void;
-  // ADICIONADO: Propriedade para uma função de busca customizada
   searchFunction?: (searchTerm: string) => Promise<Product[]>;
 }
 
@@ -26,9 +25,9 @@ export function ItemSearch({
   placeholder,
   searchId,
   onRegisterNewItem,
-  searchFunction // <-- Nova prop
+  searchFunction
 }: ItemSearchProps) {
-  const { secretariaId } = useAuth(); // <-- Obter secretariaId do contexto
+  const { secretariaId } = useAuth();
   const [searchTerm, setSearchTerm] = React.useState("");
   const [searchResults, setSearchResults] = React.useState<Product[]>([]);
   const [isSearchOpen, setIsSearchOpen] = React.useState(false);
@@ -38,7 +37,7 @@ export function ItemSearch({
   const searchRef = React.useRef<HTMLDivElement>(null);
 
   const fetchProducts = React.useCallback(async (term: string) => {
-    if (!secretariaId || term.length < 2) { // <-- Adicionada verificação de secretariaId
+    if (!secretariaId || term.length < 2) {
       setSearchResults([]);
       setIsSearchOpen(false);
       setNoResults(false);
@@ -47,8 +46,6 @@ export function ItemSearch({
     setIsLoading(true);
     setNoResults(false);
     try {
-      // Usa a função de busca customizada se ela for fornecida,
-      // caso contrário, usa a busca padrão.
       const productsFromDb = searchFunction
         ? await searchFunction(term)
         : await searchProducts(secretariaId, { searchTerm: term, materialType });
@@ -58,7 +55,7 @@ export function ItemSearch({
       if (productsFromDb.length === 0) {
         setNoResults(true);
       }
-    } catch (error: any) { // <-- Erro tipado como any
+    } catch (error: any) {
       toast({
         title: "Erro ao Buscar Produtos",
         description: error.message || "Não foi possível buscar os produtos.",
@@ -67,7 +64,7 @@ export function ItemSearch({
     } finally {
       setIsLoading(false);
     }
-  }, [toast, materialType, secretariaId, searchFunction]); // <-- Adicionadas dependências
+  }, [toast, materialType, secretariaId, searchFunction]);
 
   React.useEffect(() => {
     const handler = setTimeout(() => {
@@ -81,13 +78,11 @@ export function ItemSearch({
 
   const handleSelectItem = (item: Product) => {
     onSelectItem(item);
-    setSearchTerm(""); // Limpa o campo de busca ao selecionar
+    setSearchTerm("");
     setSearchResults([]);
     setIsSearchOpen(false);
     setNoResults(false);
   };
-  
-  // ... (Restante do componente sem alterações)
   React.useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (searchRef.current && !searchRef.current.contains(event.target as Node)) {

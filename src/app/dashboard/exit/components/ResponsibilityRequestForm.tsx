@@ -36,7 +36,7 @@ type RequestedItem = {
 
 export default function ResponsibilityRequestForm() {
     const { toast } = useToast();
-    const { user, secretariaId } = useAuth(); // Obtenha o secretariaId
+    const { user, secretariaId } = useAuth();
 
     const [responsibilityDate, setResponsibilityDate] = React.useState<Date | undefined>(new Date());
     const [responsibleName, setResponsibleName] = React.useState("");
@@ -160,7 +160,7 @@ export default function ResponsibilityRequestForm() {
     const handleActionAndFinalize = async (e: React.MouseEvent<HTMLButtonElement>) => {
         e.preventDefault();
         
-        if (!secretariaId || !user) { // Validação de segurança
+        if (!secretariaId || !user) {
             toast({ title: "Erro de autenticação", variant: "destructive" });
             return;
         }
@@ -180,7 +180,6 @@ export default function ResponsibilityRequestForm() {
                 responsible: `Responsável:${responsibleName} Operador:${user.email || "Desconhecido"}`,
             };
 
-            // Passe o secretariaId como primeiro argumento
             await finalizeExit(secretariaId, exitData);
 
             generatePDF();

@@ -31,27 +31,23 @@ type ReceivedItem = {
 
 export default function EntryPage() {
     const { toast } = useToast();
-    const { user, secretariaId } = useAuth(); // Obtenha o secretariaId
+    const { user, secretariaId } = useAuth();
 
-    // Estados do formulário
     const [entryDate, setEntryDate] = React.useState<Date | undefined>(new Date());
     const [supplier, setSupplier] = React.useState("");
     const [invoice, setInvoice] = React.useState("");
     const [responsible, setResponsible] = React.useState("");
     const [entryType, setEntryType] = React.useState<'Oficial' | 'Não Oficial'>('Oficial');
     
-    // Estados dos itens
     const [receivedItems, setReceivedItems] = React.useState<ReceivedItem[]>([]);
     const [selectedItemForAddition, setSelectedItemForAddition] = React.useState<Product | null>(null);
     const [quantity, setQuantity] = React.useState(1);
     const [expirationDate, setExpirationDate] = React.useState<Date | undefined>(undefined);
-    
-    // Estados de UI
+
     const [isAddItemSheetOpen, setIsAddItemSheetOpen] = React.useState(false);
     const [isFinalizing, setIsFinalizing] = React.useState(false);
     const [isLoading, setIsLoading] = React.useState(false);
 
-    // Seta o nome do responsável automaticamente quando o usuário é carregado
     React.useEffect(() => {
         if (user?.name) {
             setResponsible(user.name);
@@ -145,7 +141,7 @@ export default function EntryPage() {
                     expirationDate: newProductData.expirationDate,
                 }]);
             }
-        } catch (error: any) { // <-- Erro tipado como any
+        } catch (error: any) {
             toast({ title: "Erro ao Adicionar Item", description: error.message, variant: "destructive" });
         } finally {
             setIsLoading(false);
@@ -187,7 +183,7 @@ export default function EntryPage() {
             setInvoice("");
             setResponsible(user.name || "");
             setReceivedItems([]);
-        } catch (error: any) { // <-- Erro tipado como any
+        } catch (error: any) {
             toast({ title: "Erro ao Finalizar Entrada", description: error.message, variant: "destructive" });
         } finally {
             setIsFinalizing(false);
