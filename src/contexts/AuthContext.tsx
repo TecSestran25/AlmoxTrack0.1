@@ -3,13 +3,12 @@ import { onAuthStateChanged, User, reauthenticateWithCredential, EmailAuthProvid
 import { auth } from '@/lib/firebase';
 import { getUserData, UserData, getUserRole } from '@/lib/firestore';
 
-// Estendendo o tipo User do Firebase para incluir nossos dados customizados
 export type AppUser = User & UserData;
 
 interface AuthContextType {
     user: AppUser | null;
     userRole: string | null;
-    secretariaId: string | null; // <-- ADICIONADO
+    secretariaId: string | null;
     loading: boolean;
     reauthenticate: (password: string) => Promise<void>;
 }
@@ -17,7 +16,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({
     user: null,
     userRole: null,
-    secretariaId: null, // <-- ADICIONADO
+    secretariaId: null,
     loading: true,
     reauthenticate: () => Promise.reject("AuthProvider not yet mounted.")
 });
@@ -25,25 +24,22 @@ const AuthContext = createContext<AuthContextType>({
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<AppUser | null>(null);
     const [userRole, setUserRole] = useState<string | null>(null);
-    const [secretariaId, setSecretariaId] = useState<string | null>(null); // <-- ADICIONADO
+    const [secretariaId, setSecretariaId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
             setLoading(true);
             if (currentUser) {
-                // Busca os dados customizados do Firestore
                 const userData = await getUserData(currentUser.uid);
                 const role = await getUserRole(currentUser.uid);
 
                 if (userData && userData.secretariaId) {
-                    // Combina os dados do Firebase Auth com os dados do Firestore
                     const appUser: AppUser = { ...currentUser, ...userData };
                     setUser(appUser);
                     setUserRole(role || null);
-                    setSecretariaId(userData.secretariaId); // <-- Ponto-chave: Seta o ID da secretaria
+                    setSecretariaId(userData.secretariaId);
                 } else {
-                    // Caso de segurança: se o usuário não tiver secretariaId, não deve logar completamente
                     console.error("Usuário não possui secretariaId. Deslogando.");
                     auth.signOut();
                     setUser(null);
@@ -51,7 +47,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     setSecretariaId(null);
                 }
             } else {
-                // Limpa todos os estados ao deslogar
                 setUser(null);
                 setUserRole(null);
                 setSecretariaId(null);
@@ -74,7 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const value = {
         user,
         userRole,
-        secretariaId, // <-- Disponibiliza o ID para a aplicação
+        secretariaId,
         loading,
         reauthenticate
     };

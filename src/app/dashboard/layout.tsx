@@ -5,14 +5,14 @@ import * as React from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { signOut } from "firebase/auth";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
-import { Bell, MonitorSmartphone, Moon, Sun } from "lucide-react"
+import { Bell, Moon, Sun } from "lucide-react"
 import {
     CircleUser,
     LogOut,
     Package,
     ArrowRightToLine,
     ArrowLeftFromLine,
-    Settings,
+    History,
     IterationCcw,
     Warehouse,
     Loader2,
@@ -70,13 +70,11 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
 
     const allowedPathsByRole = React.useMemo(() => ({
         Requester: ["/dashboard/inventory", "/dashboard/request", "/dashboard/list_requests"],
-        Operador: ["/dashboard", "/dashboard/inventory", "/dashboard/entry", "/dashboard/exit", "/dashboard/returns", "/dashboard/requests-management"],
-        Admin: ["/dashboard", "/dashboard/inventory", "/dashboard/entry", "/dashboard/exit", "/dashboard/returns", "/dashboard/requests-management"],
+        Operador: ["/dashboard", "/dashboard/inventory", "/dashboard/entry", "/dashboard/exit", "/dashboard/returns", "/dashboard/requests-management", "/dashboard/history"],
+        Admin: ["/dashboard", "/dashboard/inventory", "/dashboard/entry", "/dashboard/exit", "/dashboard/returns", "/dashboard/requests-management", "/dashboard/history"],
     }), []);
 
     const [isVerificationComplete, setIsVerificationComplete] = React.useState(false);
-
-    // Função para tocar o som
     const playNotificationSound = () => {
         audioRef.current?.play().catch(error => {
             console.error("Erro ao tocar o som de notificação:", error);
@@ -95,8 +93,6 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
 
             const unsubscribe = onSnapshot(q, (snapshot) => {
                 const currentCount = snapshot.size;
-                
-                // Toca o som na atualização da página se houver requisições
                 if (isInitialLoad.current && currentCount > 0) {
                     playNotificationSound();
                     isInitialLoad.current = false;
@@ -112,7 +108,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                         const fiveSecondsAgo = new Date(now.getTime() - 5000);
 
                         if (requestDate > fiveSecondsAgo) {
-                            playNotificationSound(); // Toca o som para novas requisições
+                            playNotificationSound();
                             toast({
                                 title: "Nova Requisição Recebida!",
                                 description: `${newRequest.requester} do setor ${newRequest.department} fez uma nova solicitação.`,
@@ -161,6 +157,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
         { href: "/dashboard/request", icon: MailPlus, label: "Requisições", roles: ["Requester"] },
         { href: "/dashboard/requests-management", icon: Mailbox, label: "Gerenciar Requisições", roles: ["Admin", "Operador"] },
         { href: "/dashboard/list_requests", icon: ListChecks, label: "Minhas Requisições", roles: ["Requester"] },
+        { href: "/dashboard/history", icon: History, label: "Histórico", roles: ["Admin", "Operador"] },
     ];
 
     const allowedItems = React.useMemo(() => {
@@ -284,10 +281,6 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                                             <Moon className="mr-2 h-4 w-4" />
                                             <span>Escuro</span>
                                         </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => setTheme("system")}>
-                                            <MonitorSmartphone className="mr-2 h-4 w-4" />
-                                            <span>Sistema</span>
-                                        </DropdownMenuItem>
                                     </DropdownMenuSubContent>
                                 </DropdownMenuPortal>
                             </DropdownMenuSub>
@@ -335,10 +328,6 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                                         <DropdownMenuItem onClick={() => setTheme("dark")}>
                                             <Moon className="mr-2 h-4 w-4" />
                                             <span>Escuro</span>
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => setTheme("system")}>
-                                            <MonitorSmartphone className="mr-2 h-4 w-4" />
-                                            <span>Sistema</span>
                                         </DropdownMenuItem>
                                     </DropdownMenuSubContent>
                                 </DropdownMenuPortal>

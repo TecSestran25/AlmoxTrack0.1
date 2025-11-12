@@ -31,14 +31,12 @@ import { useToast } from "@/hooks/use-toast";
 import { ItemSearch } from "../../dashboard/components/item-search";
 import type { Product, RequestItem } from "@/lib/firestore";
 import { createRequest } from "@/lib/firestore";
-import { useAuth, AppUser } from "@/contexts/AuthContext"; // Importar AppUser
+import { useAuth, AppUser } from "@/contexts/AuthContext";
 
 export default function ItemRequestForm() {
     const { toast } = useToast();
-    // 1. Obter o secretariaId do contexto
     const { user, secretariaId } = useAuth();
 
-    // Estados do formulário
     const [requesterName, setRequesterName] = React.useState("");
     const [requesterId, setRequesterId] = React.useState("");
     const [department, setDepartment] = React.useState("");
@@ -49,17 +47,14 @@ export default function ItemRequestForm() {
     const [isSubmitting, setIsSubmitting] = React.useState(false);
 
     React.useEffect(() => {
-        // Popula os dados do usuário quando o contexto é carregado
         if (user) {
             setRequesterName(user.name || "");
-            // CORREÇÃO: Acessar 'id' (matrícula) de forma segura
             setRequesterId((user as AppUser).id || ""); 
             setDepartment(user.department || "");
         }
     }, [user]);
 
     const handleAddItem = () => {
-        // 2. Guarda de segurança para o secretariaId
         if (!secretariaId) {
             toast({ title: "Erro de autenticação", description: "Secretaria não identificada.", variant: "destructive" });
             return;
@@ -85,10 +80,9 @@ export default function ItemRequestForm() {
             if (existingItem) {
                 return prev.map((i) => i.id === selectedItem.id ? { ...i, quantity: i.quantity + quantity } : i);
             }
-            // CORREÇÃO: Adicionar secretariaId ao novo item
             const newItem: RequestItem = {
                 id: selectedItem.id,
-                secretariaId: secretariaId, // Adicionado
+                secretariaId: secretariaId,
                 name: selectedItem.name,
                 quantity,
                 unit: selectedItem.unit,
@@ -132,13 +126,10 @@ export default function ItemRequestForm() {
                 purpose: purpose || '',
                 requestedByUid: user.uid,
             };
-
-            // 3. Passar o secretariaId para a função createRequest
             await createRequest(secretariaId, requestDataToSend);
 
             toast({ title: "Solicitação Enviada!", variant: "success" });
 
-            // Limpar formulário
             setRequestedItems([]);
             setPurpose("");
             if (user) {

@@ -51,9 +51,8 @@ import { getAllProducts, getMovements } from "@/lib/firestore";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { startOfMonth, endOfMonth, subMonths } from "date-fns";
-import { useAuth } from "@/contexts/AuthContext"; // 1. Importar useAuth
-import { collection, getDocs } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { useAuth } from "@/contexts/AuthContext";
+
 
 
 export default function DashboardPage() {
@@ -99,7 +98,6 @@ export default function DashboardPage() {
   }, [toast]);
 
   const fetchDashboardData = React.useCallback(async () => {
-    // 3. Guarda de segurança
     if (!startDate || !endDate || !secretariaId) {
         setIsLoading(false);
         return;
@@ -107,7 +105,6 @@ export default function DashboardPage() {
 
     setIsLoading(true);
     try {
-      // 4. Passar secretariaId para todas as buscas de dados
       const productsData = await getAllProducts(secretariaId);
       setProducts(productsData);
 
@@ -119,7 +116,7 @@ export default function DashboardPage() {
           materialType: materialType !== "all" ? materialType : undefined,
           department: department !== "all" ? department : undefined,
         }),
-        getMovements(secretariaId) // Busca todos os movimentos da secretaria para popular o filtro de departamentos
+        getMovements(secretariaId)
       ]);
       
       setMovements(movementsData);
@@ -137,7 +134,6 @@ export default function DashboardPage() {
     } finally {
       setIsLoading(false);
     }
-  // 5. Adicionar secretariaId como dependência
   }, [startDate, endDate, movementType, materialType, department, toast, checkExpirationAlerts, secretariaId]);
 
   React.useEffect(() => {
@@ -218,7 +214,6 @@ export default function DashboardPage() {
   }, [movements, products]);
 
   const handleExportCSV = async () => {
-    // 3. Guarda de segurança
     if (!secretariaId) {
         toast({ title: "Erro de autenticação", variant: "destructive" });
         return;
@@ -230,16 +225,12 @@ export default function DashboardPage() {
         const lastMonth = subMonths(today, 1);
         const startDateFilter = startOfMonth(lastMonth).toISOString();
         const endDateFilter = endOfMonth(lastMonth).toISOString();
-
-        // 4. Passar secretariaId
         const movementsToExport = await getMovements(secretariaId, { startDate: startDateFilter, endDate: endDateFilter });
 
         if (movementsToExport.length === 0) {
             toast({ title: "Nenhum dado encontrado", variant: "destructive" });
             return;
         }
-
-        // 4. Passar secretariaId
         const allProducts = await getAllProducts(secretariaId);
         const productsMap = allProducts.reduce((acc, doc) => {
             acc[doc.id] = doc;
@@ -512,13 +503,13 @@ export default function DashboardPage() {
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis
                     dataKey="name"
-                    stroke="#888888"
+                    stroke="hsl(var(--foreground))"
                     fontSize={12}
                     tickLine={false}
                     axisLine={false}
                     />
                     <YAxis
-                    stroke="#888888"
+                    stroke="hsl(var(--foreground))"
                     fontSize={12}
                     tickLine={false}
                     axisLine={false}
@@ -562,13 +553,14 @@ export default function DashboardPage() {
                     tickLine={false}
                     axisLine={false}
                     fontSize={12}
+                    stroke="hsl(var(--foreground))"
                     />
                     <Tooltip cursor={{ fill: "hsl(var(--muted))" }} />
                     <Legend />
                     <Bar
                     dataKey="total"
                     name="Total Movido"
-                    fill="var(--chart-1)"
+                    fill="hsl(var(--chart-1))" 
                     radius={[0, 4, 4, 0]}
                     />
                 </BarChart>

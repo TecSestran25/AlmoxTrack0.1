@@ -27,7 +27,10 @@ body {
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
     --ring: 195 53% 79%;
-    --chart-1: 120 73% 75%;
+    
+    /* Alterado para preto (usando o valor de --foreground) */
+    --chart-1: 224 71% 4%; 
+    
     --chart-2: 70 60% 50%;
     --chart-3: 145 58% 39%;
     --chart-4: 45 100% 53%;
@@ -62,7 +65,7 @@ body {
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 212.7 26.8% 83.9%;
-    --chart-1: 220 70% 50%;
+    --chart-1: 210 30% 60%; 
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
@@ -84,5 +87,13 @@ body {
   }
   body {
     @apply bg-background text-foreground;
+  }
+  .dark .recharts-default-tooltip {
+    background-color: hsl(var(--popover)) !important;
+    border-color: hsl(var(--border)) !important;
+    color: hsl(var(--popover-foreground)) !important;
+  }
+  .dark .recharts-tooltip-label {
+    color: hsl(var(--popover-foreground)) !important;
   }
 }

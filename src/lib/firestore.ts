@@ -4,8 +4,6 @@ import { getStorage, ref, uploadString, getDownloadURL } from "firebase/storage"
 import { parseISO } from 'date-fns';
 
 // --- INTERFACES (Estrutura de Dados) ---
-// Suas interfaces já estavam corretas com a adição do secretariaId.
-
 export interface UserData {
     name?: string;
     id?: string;
@@ -130,13 +128,6 @@ export interface PaginatedRequests {
   lastDoc: DocumentSnapshot<DocumentData> | null;
 }
 
-
-// --- FUNÇÕES DE ACESSO A DADOS (ADAPTADAS PARA MULTITENANCY) ---
-
-/**
- * Busca dados de um usuário pelo UID.
- * A coleção de usuários é global, não precisa de filtro de secretaria.
- */
 export const getUserData = async (uid: string): Promise<UserData | null> => {
     try {
         const userDocRef = doc(usersCollection, uid);
@@ -151,9 +142,6 @@ export const getUserData = async (uid: string): Promise<UserData | null> => {
     }
 };
 
-/**
- * Busca a função (role) de um usuário pelo UID.
- */
 export const getUserRole = async (uid: string): Promise<string | null> => {
     try {
         const userDocRef = doc(usersCollection, uid);
@@ -168,9 +156,6 @@ export const getUserRole = async (uid: string): Promise<string | null> => {
     }
 };
 
-/**
- * Busca produtos de forma paginada para uma secretaria específica.
- */
 export const getProducts = async (
     secretariaId: string,
     filters: ProductFilters = {},
@@ -181,7 +166,7 @@ export const getProducts = async (
 
     const { searchTerm, materialType } = filters;
     const constraints: QueryConstraint[] = [
-        where('secretariaId', '==', secretariaId), // Filtro principal de multitenancy
+        where('secretariaId', '==', secretariaId),
         orderBy('name_lowercase'),
         limit(pageSize)
     ];
@@ -201,9 +186,6 @@ export const getProducts = async (
     return { products, lastDoc };
 };
 
-/**
- * Busca TODOS os produtos de uma secretaria específica (para relatórios, etc.).
- */
 export const getAllProducts = async (secretariaId: string, filters: ProductFilters = {}): Promise<Product[]> => {
     if (!secretariaId) throw new Error("ID da secretaria é obrigatório.");
     const { materialType } = filters;
@@ -219,9 +201,6 @@ export const getAllProducts = async (secretariaId: string, filters: ProductFilte
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
 };
 
-/**
- * Busca requisições de um usuário específico dentro de uma secretaria.
- */
 export const getRequestsForUser = async (
     secretariaId: string,
     uid: string,
@@ -246,9 +225,6 @@ export const getRequestsForUser = async (
     return { requests, lastDoc };
 };
 
-/**
- * Busca um produto específico pelo ID e verifica se ele pertence à secretaria.
- */
 export const getProductById = async (secretariaId: string, productId: string): Promise<Product | null> => {
     if (!secretariaId) throw new Error("ID da secretaria é obrigatório.");
     const productRef = doc(productsCollection, productId);
@@ -262,9 +238,6 @@ export const getProductById = async (secretariaId: string, productId: string): P
     return null;
 };
 
-/**
- * Busca produtos por nome ou código dentro de uma secretaria.
- */
 export const searchProducts = async (secretariaId: string, filters: ProductFilters = {}): Promise<Product[]> => {
     if (!secretariaId) throw new Error("ID da secretaria é obrigatório.");
     const { searchTerm, materialType } = filters;
@@ -296,9 +269,6 @@ export const searchProducts = async (secretariaId: string, filters: ProductFilte
     return Array.from(productsMap.values());
 };
 
-/**
- * Adiciona um novo produto, associando-o à secretaria.
- */
 export const addProduct = async (secretariaId: string, productData: Omit<Product, 'id' | 'secretariaId'>): Promise<string> => {
     if (!secretariaId) throw new Error("ID da secretaria é obrigatório.");
     const dataWithTenant = { ...productData, secretariaId };
@@ -306,9 +276,6 @@ export const addProduct = async (secretariaId: string, productData: Omit<Product
     return docRef.id;
 };
 
-/**
- * Atualiza um produto após verificar se ele pertence à secretaria.
- */
 export const updateProduct = async (secretariaId: string, productId: string, productData: Partial<Product>): Promise<void> => {
     if (!secretariaId) throw new Error("ID da secretaria é obrigatório.");
     const productDocRef = doc(productsCollection, productId);
@@ -321,9 +288,6 @@ export const updateProduct = async (secretariaId: string, productId: string, pro
     await updateDoc(productDocRef, productData);
 };
 
-/**
- * Deleta um produto após verificar se ele pertence à secretaria.
- */
 export const deleteProduct = async (secretariaId: string, productId: string): Promise<void> => {
     if (!secretariaId) throw new Error("ID da secretaria é obrigatório.");
     const productDocRef = doc(productsCollection, productId);
@@ -343,9 +307,6 @@ export type ImageObject = {
     contentType: string;
 };
 
-/**
- * Faz upload de uma imagem. Não interage diretamente com coleções tenant-based.
- */
 export const uploadImage = async (imageObject: ImageObject): Promise<string> => {
     if (!imageObject || !imageObject.base64) {
         return "https://placehold.co/40x40.png";
@@ -371,9 +332,6 @@ export const uploadImage = async (imageObject: ImageObject): Promise<string> => 
     }
 };
 
-/**
- * Gera o próximo código de item sequencial dentro de uma secretaria.
- */
 export const generateNextItemCode = async (secretariaId: string, prefix: string): Promise<string> => {
     if (!secretariaId) throw new Error("ID da secretaria é obrigatório.");
     const q = query(
@@ -398,9 +356,6 @@ export const generateNextItemCode = async (secretariaId: string, prefix: string)
 
 // --- TRANSAÇÕES (MOVIMENTAÇÕES DE ESTOQUE) ---
 
-/**
- * Finaliza uma transação de ENTRADA de itens no estoque.
- */
 export const finalizeEntry = async (secretariaId: string, entryData: EntryData): Promise<void> => {
     if (!secretariaId) throw new Error("ID da secretaria é obrigatório.");
     try {
@@ -408,7 +363,6 @@ export const finalizeEntry = async (secretariaId: string, entryData: EntryData):
             const productRefs = entryData.items.map(item => doc(productsCollection, item.id));
             const productDocs = await Promise.all(productRefs.map(ref => transaction.get(ref)));
 
-            // Valida todos os documentos antes de prosseguir
             for (let i = 0; i < productDocs.length; i++) {
                 const productDoc = productDocs[i];
                 if (!productDoc.exists() || productDoc.data().secretariaId !== secretariaId) {
@@ -416,11 +370,9 @@ export const finalizeEntry = async (secretariaId: string, entryData: EntryData):
                 }
             }
 
-            // Executa as atualizações
             for (let i = 0; i < entryData.items.length; i++) {
                 const item = entryData.items[i];
                 const productDoc = productDocs[i];
-                // CORREÇÃO APLICADA AQUI
                 const productData = productDoc.data() as Product; 
 
                 const productUpdateData: { quantity: any; expirationDate?: string; } = {
@@ -445,7 +397,7 @@ export const finalizeEntry = async (secretariaId: string, entryData: EntryData):
                     responsible: entryData.responsible,
                     supplier: entryData.supplier,
                     entryType: entryData.entryType,
-                    productType: productData.type, // CORREÇÃO APLICADA AQUI
+                    productType: productData.type,
                     expirationDate: item.expirationDate || "",
                     invoice: entryData.invoice || "",
                 };
@@ -460,30 +412,18 @@ export const finalizeEntry = async (secretariaId: string, entryData: EntryData):
     }
 };
 
-/**
- * Finaliza uma transação de SAÍDA de itens do estoque.
- */
 export const finalizeExit = async (secretariaId: string, exitData: ExitData, requestId?: string): Promise<void> => {
     if (!secretariaId) throw new Error("ID da secretaria é obrigatório.");
     try {
         await runTransaction(db, async (transaction) => {
-            // --- ETAPA 1: LEITURA DE TODOS OS DOCUMENTOS ---
-            // Primeiro, preparamos as referências de todos os produtos.
             const productRefs = exitData.items.map(item => doc(productsCollection, item.id));
-            
-            // Agora, fazemos a leitura de TODOS os documentos necessários no início.
             const productDocs = await Promise.all(productRefs.map(ref => transaction.get(ref)));
-
-            // **CORREÇÃO PRINCIPAL:** Se houver uma requisição, lemos ela AQUI, junto com os outros documentos.
             let requestRef = null;
             let requestDoc = null;
             if (requestId) {
                 requestRef = doc(requestsCollection, requestId);
-                requestDoc = await transaction.get(requestRef); // Leitura da requisição movida para o início.
+                requestDoc = await transaction.get(requestRef);
             }
-
-            // --- ETAPA 2: VALIDAÇÃO DOS DADOS LIDOS ---
-            // Validamos os produtos.
             for (let i = 0; i < productDocs.length; i++) {
                 const productDoc = productDocs[i];
                 const item = exitData.items[i];
@@ -494,21 +434,13 @@ export const finalizeExit = async (secretariaId: string, exitData: ExitData, req
                     throw new Error(`Estoque insuficiente para ${productDoc.data().name}.`);
                 }
             }
-            // Validamos a requisição (se existir).
             if (requestId && (!requestDoc || !requestDoc.exists() || requestDoc.data().secretariaId !== secretariaId)) {
                 throw new Error("Requisição não encontrada ou inválida.");
             }
-
-            // --- ETAPA 3: EXECUÇÃO DE TODAS AS ESCRITAS ---
-            // Agora que todas as leituras e validações foram feitas, podemos começar a escrever.
             for (let i = 0; i < exitData.items.length; i++) {
                 const item = exitData.items[i];
                 const productData = productDocs[i].data() as Product;
-
-                // Escrita 1: Atualiza o estoque do produto
                 transaction.update(productRefs[i], { quantity: increment(-item.quantity) });
-
-                // Escrita 2: Cria o registro de movimentação
                 const movementData: Omit<Movement, 'id'> = {
                     secretariaId,
                     productId: item.id,
@@ -524,9 +456,7 @@ export const finalizeExit = async (secretariaId: string, exitData: ExitData, req
                 const movementRef = doc(movementsCollection);
                 transaction.set(movementRef, movementData);
             }
-
-            // Escrita 3: Atualiza a requisição (se existir)
-            if (requestRef) { // Usamos a requestRef que já preparamos
+            if (requestRef) {
                 transaction.update(requestRef, {
                     status: 'approved',
                     approvalDate: new Date().toISOString(),
@@ -540,10 +470,6 @@ export const finalizeExit = async (secretariaId: string, exitData: ExitData, req
         throw e;
     }
 };
-
-/**
- * Finaliza uma transação de DEVOLUÇÃO de itens para o estoque.
- */
 export const finalizeReturn = async (secretariaId: string, returnData: ReturnData): Promise<void> => {
     if (!secretariaId) throw new Error("ID da secretaria é obrigatório.");
     try {
@@ -559,7 +485,6 @@ export const finalizeReturn = async (secretariaId: string, returnData: ReturnDat
 
             for (let i = 0; i < returnData.items.length; i++) {
                 const item = returnData.items[i];
-                // CORREÇÃO APLICADA AQUI
                 const productData = productDocs[i].data() as Product;
                 
                 transaction.update(productRefs[i], { quantity: increment(item.quantity) });
@@ -572,7 +497,7 @@ export const finalizeReturn = async (secretariaId: string, returnData: ReturnDat
                     quantity: item.quantity,
                     responsible: returnData.responsible,
                     department: returnData.department,
-                    productType: productData.type, // CORREÇÃO APLICADA AQUI
+                    productType: productData.type,
                 };
 
                 const movementRef = doc(movementsCollection);
@@ -590,9 +515,6 @@ export const finalizeReturn = async (secretariaId: string, returnData: ReturnDat
     }
 };
 
-/**
- * Função auxiliar para encontrar e definir a nova data de expiração de um produto.
- */
 const findAndSetNewExpirationDate = async (secretariaId: string, productId: string) => {
     const q = query(movementsCollection, where('secretariaId', '==', secretariaId), where('productId', '==', productId));
     const snapshot = await getDocs(q);
@@ -618,16 +540,12 @@ const findAndSetNewExpirationDate = async (secretariaId: string, productId: stri
             remainingSaidas -= entrada.quantity;
         }
     }
-    
-    // Chama a função de update segura
+
     await updateProduct(secretariaId, productId, { expirationDate: newExpirationDate || "" });
 };
 
 // --- FUNÇÕES DE CONSULTA DE MOVIMENTOS E REQUISIÇÕES ---
 
-/**
- * Busca todas as movimentações para uma lista de produtos de uma secretaria.
- */
 export const getMovementsForProducts = async (secretariaId: string, productIds: string[]): Promise<Movement[]> => {
     if (!secretariaId) throw new Error("ID da secretaria é obrigatório.");
     if (!productIds || productIds.length === 0) return [];
@@ -637,9 +555,6 @@ export const getMovementsForProducts = async (secretariaId: string, productIds: 
     return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Movement));
 };
 
-/**
- * Busca movimentações com base em filtros para uma secretaria.
- */
 export const getMovements = async (secretariaId: string, filters: MovementFilters = {}): Promise<Movement[]> => {
     if (!secretariaId) throw new Error("ID da secretaria é obrigatório.");
     const { startDate, endDate, movementType, materialType, department } = filters;
@@ -662,9 +577,6 @@ export const getMovements = async (secretariaId: string, filters: MovementFilter
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Movement));
 };
 
-/**
- * Busca todas as movimentações de um item específico em uma secretaria.
- */
 export const getMovementsForItem = async (secretariaId: string, productId: string): Promise<Movement[]> => {
     if (!secretariaId) throw new Error("ID da secretaria é obrigatório.");
     const q = query(movementsCollection, where('secretariaId', '==', secretariaId), where('productId', '==', productId), orderBy('date', 'desc'));
@@ -672,9 +584,6 @@ export const getMovementsForItem = async (secretariaId: string, productId: strin
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Movement));
 }
 
-/**
- * Adiciona um registro de movimento avulso (ex: auditoria).
- */
 export const addMovement = async (secretariaId: string, movementData: Omit<Movement, 'id' | 'secretariaId'>): Promise<string> => {
     if (!secretariaId) throw new Error("ID da secretaria é obrigatório.");
     const dataWithTenant = { ...movementData, secretariaId };
@@ -682,9 +591,6 @@ export const addMovement = async (secretariaId: string, movementData: Omit<Movem
     return docRef.id;
 };
 
-/**
- * Busca todas as requisições pendentes de uma secretaria.
- */
 export const getPendingRequests = async (secretariaId: string): Promise<RequestData[]> => {
     if (!secretariaId) throw new Error("ID da secretaria é obrigatório.");
     const q = query(requestsCollection, where('secretariaId', '==', secretariaId), where('status', '==', 'pending'), orderBy('date', 'desc'));
@@ -692,9 +598,29 @@ export const getPendingRequests = async (secretariaId: string): Promise<RequestD
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RequestData));
 };
 
-/**
- * Rejeita uma requisição após verificar se ela pertence à secretaria.
- */
+export const getProcessedRequests = async (
+    secretariaId: string,
+    pageSize: number,
+    cursor?: DocumentSnapshot<DocumentData>
+): Promise<PaginatedRequests> => {
+    if (!secretariaId) return { requests: [], lastDoc: null };
+
+    const constraints: QueryConstraint[] = [
+        where('secretariaId', '==', secretariaId),
+        where('status', 'in', ['approved', 'rejected']),
+        orderBy('date', 'desc'),
+        limit(pageSize)
+    ];
+
+    if (cursor) constraints.push(startAfter(cursor));
+
+    const finalQuery = query(requestsCollection, ...constraints);
+    const snapshot = await getDocs(finalQuery);
+    const requests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RequestData));
+    const lastDoc = snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null;
+    return { requests, lastDoc };
+};
+
 export const rejectRequest = async (secretariaId: string, requestId: string, responsible: string, reason: string): Promise<void> => {
     if (!secretariaId) throw new Error("ID da secretaria é obrigatório.");
     const requestRef = doc(requestsCollection, requestId);
@@ -712,9 +638,6 @@ export const rejectRequest = async (secretariaId: string, requestId: string, res
     });
 };
 
-/**
- * Cria uma nova requisição, associando-a à secretaria.
- */
 export const createRequest = async (secretariaId: string, requestData: Omit<RequestData, 'id' | 'status' | 'secretariaId'>): Promise<string> => {
     if (!secretariaId) throw new Error("ID da secretaria é obrigatório.");
     const dataWithTenant = { ...requestData, secretariaId, status: 'pending' as const };
@@ -722,9 +645,6 @@ export const createRequest = async (secretariaId: string, requestData: Omit<Requ
     return docRef.id;
 };
 
-/**
- * Deleta uma requisição após verificar se pertence ao usuário e à secretaria.
- */
 export const deleteRequest = async (secretariaId: string, requestId: string, userId: string): Promise<void> => {
     if (!secretariaId) throw new Error("ID da secretaria é obrigatório.");
     const requestRef = doc(requestsCollection, requestId);

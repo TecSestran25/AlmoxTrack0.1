@@ -2,9 +2,9 @@ import * as React from "react";
 import { format, parseISO, differenceInMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-import type { Movement, Product } from "@/lib/firestore"; // Import Product type
+import type { Movement, Product } from "@/lib/firestore";
 import { getMovementsForItem } from "@/lib/firestore";
-import { useAuth } from "@/contexts/AuthContext"; // 1. Importar useAuth
+import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 
 import { Button } from "@/components/ui/button";
@@ -79,7 +79,7 @@ const getTableRowClass = (status: 'alert' | 'warning' | 'reminder' | null, movem
 interface MovementsSheetProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  item: Product | null; // Tipagem corrigida para Product | null
+  item: Product | null;
 }
 
 const extractRequesterInfo = (requesterString: string) => {
@@ -95,16 +95,13 @@ export function MovementsSheet({ isOpen, onOpenChange, item }: MovementsSheetPro
   const [itemMovements, setItemMovements] = React.useState<Movement[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
   const { toast } = useToast();
-  // 1. Obter o secretariaId do contexto
   const { secretariaId } = useAuth(); 
 
   React.useEffect(() => {
     const fetchMovements = async () => {
-      // 2. Guarda de segurança
       if (isOpen && item && secretariaId) { 
         setIsLoading(true);
         try {
-            // 3. Passar o secretariaId para a função
             const movements = await getMovementsForItem(secretariaId, item.id);
             const sortedMovements = movements.sort((a, b) => 
                 parseISO(b.date).getTime() - parseISO(a.date).getTime()
@@ -118,7 +115,6 @@ export function MovementsSheet({ isOpen, onOpenChange, item }: MovementsSheetPro
       }
     };
     fetchMovements();
-  // 4. Adicionar secretariaId como dependência
   }, [isOpen, item, secretariaId, toast]);
 
   const processedMovements = React.useMemo(() => {

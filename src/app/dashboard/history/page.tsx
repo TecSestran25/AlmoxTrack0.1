@@ -5,7 +5,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useAuth } from "@/contexts/AuthContext";
 import type { RequestData } from "@/lib/firestore";
-import { getRequestsForUser, deleteRequest } from "@/lib/firestore";
+import { getProcessedRequests } from "@/lib/firestore";
 import { DocumentSnapshot, DocumentData } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 
@@ -40,22 +40,18 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { 
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-    AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Trash2 } from "lucide-react";
 
-export default function MyRequestsPage() {
-  const { user, secretariaId } = useAuth(); 
+export default function HistoryPage() {
+  const { secretariaId } = useAuth(); 
   const { toast } = useToast();
   const [requests, setRequests] = React.useState<RequestData[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -63,17 +59,16 @@ export default function MyRequestsPage() {
   const [currentPage, setCurrentPage] = React.useState(1);
   const [pageCursors, setPageCursors] = React.useState<(DocumentSnapshot<DocumentData> | undefined)[]>([undefined]);
   const [hasNextPage, setHasNextPage] = React.useState(true);
-  const [isDeleting, setIsDeleting] = React.useState<string | null>(null);
-  const PAGE_SIZE = 5;
+  const PAGE_SIZE = 10;
 
   const fetchRequests = React.useCallback(async (page: number, cursor?: DocumentSnapshot<DocumentData>) => {
-    if (!user?.uid || !secretariaId) {
+    if (!secretariaId) {
         setIsLoading(false);
         return;
     }
     setIsLoading(true);
     try {
-      const { requests: data, lastDoc } = await getRequestsForUser(secretariaId, user.uid, PAGE_SIZE, cursor);
+      const { requests: data, lastDoc } = await getProcessedRequests(secretariaId, PAGE_SIZE, cursor);
       setRequests(data);
       setHasNextPage(data.length === PAGE_SIZE);
       if (lastDoc) {
@@ -84,16 +79,16 @@ export default function MyRequestsPage() {
         });
       }
     } catch (error: any) {
-      console.error("Erro ao buscar requisições:", error);
-      toast({ title: "Erro ao buscar requisições", description: error.message, variant: "destructive" });
+      console.error("Erro ao buscar histórico de requisições:", error);
+      toast({ title: "Erro ao buscar histórico", description: error.message, variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
-  }, [user, secretariaId, toast]);
+  }, [secretariaId, toast]);
 
   React.useEffect(() => {
     fetchRequests(1, undefined);
-  }, [user, secretariaId, fetchRequests]);
+  }, [fetchRequests]);
 
   const handleNextPage = () => {
     if (!hasNextPage) return;
@@ -109,28 +104,6 @@ export default function MyRequestsPage() {
     const cursor = pageCursors[prevPage - 1]; 
     fetchRequests(prevPage, cursor);
     setCurrentPage(prevPage);
-  };
-
-  const handleDeleteRequest = async (requestId: string) => {
-    if (!user?.uid || !secretariaId) return;
-    
-    setIsDeleting(requestId);
-    try {
-        await deleteRequest(secretariaId, requestId, user.uid);
-        toast({
-            title: "Requisição Cancelada",
-            variant: "success"
-        });
-        fetchRequests(currentPage, pageCursors[currentPage - 1]);
-    } catch (error: any) {
-        toast({
-            title: "Erro ao Cancelar",
-            description: error.message,
-            variant: "destructive"
-        });
-    } finally {
-        setIsDeleting(null);
-    }
   };
 
   const getStatusVariant = (status: RequestData['status']) => {
@@ -191,39 +164,39 @@ export default function MyRequestsPage() {
     <TooltipProvider>
       <div className="flex flex-col gap-6">
         <div>
-            <h1 className="text-3xl font-bold tracking-tight">Minhas Requisições</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Histórico de Requisições</h1>
             <p className="text-muted-foreground">
-                Acompanhe o andamento de todas as suas solicitações de materiais.
+                Veja todas as solicitações de materiais que já foram aprovadas ou rejeitadas.
             </p>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>Histórico de Solicitações</CardTitle>
+            <CardTitle>Requisições Processadas</CardTitle>
           </CardHeader>
           <CardContent>
             {/* --- VISUALIZAÇÃO PARA DESKTOP (TABELA) --- */}
-            {/* A classe `hidden md:block` esconde isso em telas pequenas e mostra em médias/grandes */}
             <div className="hidden md:block border rounded-md">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Data</TableHead>
+                    <TableHead>Solicitante</TableHead>
                     <TableHead>Itens</TableHead>
                     <TableHead>Finalidade</TableHead>
                     <TableHead className="text-center">Status</TableHead>
-                    <TableHead className="text-center">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {isLoading ? (
-                    <TableRow><TableCell colSpan={4} className="text-center h-24">Carregando...</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={5} className="text-center h-24">Carregando...</TableCell></TableRow>
                   ) : requests.length > 0 ? (
                     requests.map((request) => (
                       <TableRow key={request.id}>
                         <TableCell>
                           {format(new Date(request.date), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
                         </TableCell>
+                        <TableCell>{request.requester}</TableCell>
                         <TableCell>
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -244,52 +217,16 @@ export default function MyRequestsPage() {
                         <TableCell className="text-center">
                           <StatusBadge request={request} />
                         </TableCell>
-
-                        <TableCell className="text-center">
-                          {request.status === 'pending' && (
-                            <AlertDialog>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <AlertDialogTrigger asChild>
-                                            <Button variant="ghost" size="icon" disabled={!!isDeleting}>
-                                                <Trash2 className="h-4 w-4 text-red-500" />
-                                            </Button>
-                                        </AlertDialogTrigger>
-                                    </TooltipTrigger>
-                                    <TooltipContent><p>Cancelar Requisição</p></TooltipContent>
-                                </Tooltip>
-                                <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                        <AlertDialogTitle>Tem certeza?</AlertDialogTitle>
-                                        <AlertDialogDescription>
-                                            Esta ação não pode ser desfeita. Você está prestes a cancelar esta requisição permanentemente.
-                                        </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                        <AlertDialogCancel>Voltar</AlertDialogCancel>
-                                        <AlertDialogAction 
-                                            onClick={() => handleDeleteRequest(request.id)}
-                                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                        >
-                                            {isDeleting === request.id ? 'Cancelando...' : 'Sim, cancelar'}
-                                        </AlertDialogAction>
-                                    </AlertDialogFooter>
-                                </AlertDialogContent>
-                            </AlertDialog>
-                          )}
-                        </TableCell>
-                        
                       </TableRow>
                     ))
                   ) : (
-                    <TableRow><TableCell colSpan={4} className="text-center h-24">Nenhuma requisição encontrada.</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={5} className="text-center h-24">Nenhuma requisição processada encontrada.</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
             </div>
 
             {/* --- VISUALIZAÇÃO PARA MOBILE (CARDS) --- */}
-            {/* A classe `md:hidden` mostra isso em telas pequenas e esconde em médias/grandes */}
             <div className="md:hidden space-y-4">
               {isLoading ? (
                 <div className="text-center text-muted-foreground p-4">Carregando...</div>
@@ -306,62 +243,39 @@ export default function MyRequestsPage() {
                         </CardHeader>
                         <CardContent className="text-sm text-muted-foreground space-y-2">
                              <div>
+                                <strong>Solicitante: </strong> {request.requester}
+                             </div>
+                             <div>
                                 <strong>Itens: </strong>
-                                <Dialog>
-                                    <DialogTrigger asChild>
+                                <Sheet>
+                                    <SheetTrigger asChild>
                                         <span className="underline decoration-dashed cursor-pointer text-primary">
                                             {request.items.length} item(s)
                                         </span>
-                                    </DialogTrigger>
-                                    <DialogContent>
-                                        <DialogHeader>
-                                            <DialogTitle>Itens Solicitados</DialogTitle>
-                                        </DialogHeader>
-                                        <ul className="list-disc pl-5 pt-2 space-y-1">
+                                    </SheetTrigger>
+                                    <SheetContent side="bottom">
+                                        <SheetHeader>
+                                            <SheetTitle>Itens Solicitados</SheetTitle>
+                                            <SheetDescription>
+                                              Requisição de {request.requester} em {format(new Date(request.date), "dd/MM/yyyy", { locale: ptBR })}.
+                                            </SheetDescription>
+                                        </SheetHeader>
+                                        <ul className="list-disc pl-5 pt-4 space-y-2">
                                             {request.items.map(item => (
                                             <li key={item.id}>{item.quantity} {item.unit}(s) de <strong>{item.name}</strong></li>
                                             ))}
                                         </ul>
-                                    </DialogContent>
-                                </Dialog>
+                                    </SheetContent>
+                                </Sheet>
                              </div>
                              <div>
                                 <strong>Finalidade: </strong> {request.purpose || "N/A"}
                              </div>
                         </CardContent>
-                        <CardFooter>
-                            {request.status === 'pending' && (
-                                <AlertDialog>
-                                    <AlertDialogTrigger asChild>
-                                        <Button variant="ghost" className="w-full text-red-500" disabled={!!isDeleting}>
-                                            <Trash2 className="mr-2 h-4 w-4" />
-                                            Cancelar Requisição
-                                        </Button>
-                                    </AlertDialogTrigger>
-                                    <AlertDialogContent>
-                                        <AlertDialogHeader>
-                                          <AlertDialogTitle>Tem certeza?</AlertDialogTitle>
-                                          <AlertDialogDescription>
-                                              Esta ação não pode ser desfeita. Você está prestes a cancelar esta requisição permanentemente.
-                                          </AlertDialogDescription>
-                                      </AlertDialogHeader>
-                                      <AlertDialogFooter>
-                                          <AlertDialogCancel>Voltar</AlertDialogCancel>
-                                          <AlertDialogAction 
-                                              onClick={() => handleDeleteRequest(request.id)}
-                                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                          >
-                                              {isDeleting === request.id ? 'Cancelando...' : 'Sim, cancelar'}
-                                          </AlertDialogAction>
-                                      </AlertDialogFooter>
-                                    </AlertDialogContent>
-                                </AlertDialog>
-                            )}
-                        </CardFooter>
                     </Card>
                 ))
               ) : (
-                <div className="text-center text-muted-foreground p-4">Nenhuma requisição encontrada.</div>
+                <div className="text-center text-muted-foreground p-4">Nenhuma requisição processada encontrada.</div>
               )}
             </div>
           </CardContent>

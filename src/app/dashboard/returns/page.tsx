@@ -49,7 +49,6 @@ type ReturnedItem = {
 };
 
 export default function ReturnsPage() {
-    // 1. Obter o secretariaId do contexto
     const { user, secretariaId } = useAuth();
     const { toast } = useToast();
     
@@ -87,7 +86,6 @@ export default function ReturnsPage() {
     };
 
     const handleFinalizeReturn = async () => {
-        // 2. Guarda de segurança
         if (!user || !secretariaId) {
             toast({ title: "Erro de Autenticação", description: "Usuário ou secretaria não identificados.", variant: "destructive" });
             return;
@@ -113,8 +111,6 @@ export default function ReturnsPage() {
                 reason: finalReason,
                 responsible: user.name || user.email || "Desconhecido",
             };
-
-            // 3. Passar o secretariaId para a função
             await finalizeReturn(secretariaId, returnData);
 
             toast({ title: "Devolução Registrada!", variant: "success" });

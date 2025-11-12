@@ -43,20 +43,18 @@ export default function RequestsManagementPage() {
     const [isProcessing, setIsProcessing] = React.useState<string | null>(null);
     const [rejectionReason, setRejectionReason] = React.useState("");
     const [requestToReject, setRequestToReject] = React.useState<RequestData | null>(null);
-    // 1. Obter o secretariaId do contexto
+    
     const { user, secretariaId } = useAuth();
     const { toast } = useToast();
     const router = useRouter();
 
     const fetchRequests = React.useCallback(async () => {
-        // 2. Guarda de segurança
         if (!secretariaId) {
             setIsLoading(false);
             return;
         }
         setIsLoading(true);
         try {
-            // 3. Passar o secretariaId para a função
             const requests = await getPendingRequests(secretariaId);
             setPendingRequests(requests);
         } catch (error: any) {
@@ -68,7 +66,6 @@ export default function RequestsManagementPage() {
         } finally {
             setIsLoading(false);
         }
-    // 4. Adicionar secretariaId como dependência
     }, [toast, secretariaId]);
 
     React.useEffect(() => {
@@ -77,8 +74,6 @@ export default function RequestsManagementPage() {
 
     const handleApproveAndRedirect = (request: RequestData) => {
         setIsProcessing(request.id);
-        // A lógica de codificar e redirecionar não precisa do secretariaId aqui,
-        // pois a página de 'exit' que receberá os dados já é multitenant.
         try {
             const exitData = {
                 requester: request.requester,
@@ -99,7 +94,6 @@ export default function RequestsManagementPage() {
             const firstItemType = request.items[0]?.type || 'consumo';
             const tabToOpen = firstItemType === 'permanente' ? 'responsibility' : 'consumption';
 
-            // O requestId já é um identificador único global
             router.push(`/dashboard/exit?tab=${tabToOpen}&requestData=${encodedData}&requestId=${request.id}`);
 
         } catch (error: any) {
@@ -109,7 +103,6 @@ export default function RequestsManagementPage() {
     };
 
     const handleReject = async (requestId: string, reason: string) => {
-        // 2. Guarda de segurança
         if (!user?.email || !secretariaId) {
             toast({ title: "Erro de autenticação", variant: "destructive" });
             return;
@@ -122,13 +115,12 @@ export default function RequestsManagementPage() {
 
         setIsProcessing(requestId);
         try {
-            // 3. Passar o secretariaId para a função
             await rejectRequest(secretariaId, requestId, user.email, reason);
 
             toast({ title: "Requisição Rejeitada!", variant: "default" });
             setRequestToReject(null);
             setRejectionReason("");
-            fetchRequests(); // Recarrega a lista de pendentes
+            fetchRequests();
 
         } catch (error: any) {
             toast({ title: "Erro ao Rejeitar", description: error.message, variant: "destructive" });
@@ -192,7 +184,6 @@ export default function RequestsManagementPage() {
                                                     variant="ghost"
                                                     size="icon"
                                                     className="text-red-600 hover:bg-red-100"
-                                                    // 👇 ALTERE ESTA LINHA 👇
                                                     onClick={() => setRequestToReject(request)} 
                                                     disabled={isProcessing === request.id}
                                                 >

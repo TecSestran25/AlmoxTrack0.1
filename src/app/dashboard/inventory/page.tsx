@@ -51,7 +51,6 @@ import { EditItemSheet } from "./components/edit-item-sheet";
 import { MovementsSheet } from "./components/movements-sheet";
 import { ReauthDialog } from "../components/reauth-dialog";
 
-// Funções auxiliares de UI (sem alterações)
 const getExpirationStatus = (expirationDate?: string): 'alert' | 'warning' | 'reminder' | null => {
   if (!expirationDate) return null;
   const today = new Date();
@@ -81,7 +80,6 @@ const getTooltipText = (status: 'alert' | 'warning' | 'reminder' | null, date: s
 }
 
 export default function InventoryPage() {
-  // 1. Obter o secretariaId do contexto
   const { user, userRole, secretariaId } = useAuth();
   const { toast } = useToast();
   
@@ -90,7 +88,6 @@ export default function InventoryPage() {
   const [isLoading, setIsLoading] = React.useState(true);
   const [isExporting, setIsExporting] = React.useState(false);
 
-  // ... (outros estados de UI e paginação sem alterações)
   const [isAddSheetOpen, setIsAddSheetOpen] = React.useState(false);
   const [isEditSheetOpen, setIsEditSheetOpen] = React.useState(false);
   const [isMovementsSheetOpen, setIsMovementsSheetOpen] = React.useState(false);
@@ -103,22 +100,20 @@ export default function InventoryPage() {
   const PAGE_SIZE = 8;
 
   const fetchProducts = React.useCallback(async (term: string, page: number = 1, cursor?: DocumentSnapshot<DocumentData>) => {
-    // 2. Guarda de segurança: não fazer nada se o secretariaId não estiver carregado
+
     if (!secretariaId) {
-        setIsLoading(false); // Garante que o loading não fique preso
+        setIsLoading(false);
         return;
     }
 
     setIsLoading(true);
     try {
-      // 3. Passar o secretariaId para getProducts
       const { products: productsFromDb, lastDoc } = await getProducts(secretariaId, { searchTerm: term }, PAGE_SIZE, cursor);
 
       const perishableProductIds = productsFromDb.filter(p => p.isPerishable === 'Sim').map(p => p.id);
       let movementsByProduct = new Map<string, Movement[]>();
 
       if (perishableProductIds.length > 0) {
-        // 3. Passar o secretariaId para getMovementsForProducts
         const allMovements = await getMovementsForProducts(secretariaId, perishableProductIds);
         for (const movement of allMovements) {
             if (!movementsByProduct.has(movement.productId)) {
@@ -127,8 +122,6 @@ export default function InventoryPage() {
             movementsByProduct.get(movement.productId)!.push(movement);
         }
       }
-
-      // ... (lógica de cálculo de validade continua igual)
       const productsWithAlerts = productsFromDb.map(product => {
         if (product.isPerishable !== 'Sim') {
           return { ...product, calculatedExpirationDate: undefined };
@@ -167,7 +160,6 @@ export default function InventoryPage() {
     } finally {
       setIsLoading(false);
     }
-  // 4. Adicionar secretariaId como dependência
   }, [toast, secretariaId]);
 
   React.useEffect(() => {
@@ -177,14 +169,14 @@ export default function InventoryPage() {
       fetchProducts(searchTerm, 1, undefined);
     }, 500);
     return () => clearTimeout(handler);
-  }, [searchTerm, fetchProducts]); // fetchProducts já tem secretariaId na sua dependência
+  }, [searchTerm, fetchProducts]);
 
   const handleNextPage = () => { if (hasNextPage) { const nextPage = currentPage + 1; fetchProducts(searchTerm, nextPage, pageCursors[currentPage]); setCurrentPage(nextPage); }};
   const handlePreviousPage = () => { if (currentPage > 1) { const prevPage = currentPage - 1; fetchProducts(searchTerm, prevPage, pageCursors[prevPage - 1]); setCurrentPage(prevPage); }};
   const refreshAndGoToFirstPage = () => { setSearchTerm(""); setCurrentPage(1); setPageCursors([undefined]); fetchProducts("", 1, undefined); }
 
   const handleAddItem = React.useCallback(async (newItemData: any) => {
-    if (!secretariaId) return; // Guarda de segurança
+    if (!secretariaId) return;
     setIsLoading(true);
     try {
       let imageUrl = "https://placehold.co/40x40.png";
@@ -193,7 +185,6 @@ export default function InventoryPage() {
       const categoryPrefix = newItemData.category.substring(0, 3).toUpperCase();
       const namePrefix = newItemData.name.substring(0, 3).toUpperCase();
       const codePrefix = `${categoryPrefix}-${namePrefix}`;
-      // 3. Passar secretariaId
       const generatedCode = await generateNextItemCode(secretariaId, codePrefix);
       const finalCategory = newItemData.category === 'Outro' ? newItemData.otherCategory : newItemData.category;
 
@@ -210,11 +201,8 @@ export default function InventoryPage() {
         reference: newItemData.reference || '',
         isPerishable: newItemData.isPerishable,
       };
-
-      // 3. Passar secretariaId
       const newProductId = await addProduct(secretariaId, newProduct);
       if (newProduct.quantity > 0) {
-        // 3. Passar secretariaId
         await addMovement(secretariaId, {
           productId: newProductId,
           date: new Date().toISOString(),
@@ -230,11 +218,10 @@ export default function InventoryPage() {
     } finally {
       setIsLoading(false);
     }
-  // 4. Adicionar secretariaId como dependência
   }, [user, toast, secretariaId]);
 
   const handleUpdateItem = React.useCallback(async (updatedItemData: any) => {
-    if (!selectedItem || !secretariaId) return; // Guarda de segurança
+    if (!selectedItem || !secretariaId) return;
     setIsLoading(true);
     try {
       let imageUrl = selectedItem.image;
@@ -256,13 +243,9 @@ export default function InventoryPage() {
           image: imageUrl,
           isPerishable: updatedItemData.isPerishable,
       };
-      
-      // ... (lógica de `changes` continua igual)
       const changes: string[] = [];
-      // (seu código para popular `changes` aqui)
       
       if (changes.length > 0) {
-        // 3. Passar secretariaId
         await addMovement(secretariaId, {
           productId: selectedItem.id,
           date: new Date().toISOString(),
@@ -273,8 +256,6 @@ export default function InventoryPage() {
           productType: updateData.type,
         });
       }
-      
-      // 3. Passar secretariaId
       await updateProduct(secretariaId, selectedItem.id, updateData);
       
       toast({ title: "Item Atualizado!", variant: "success" });
@@ -284,14 +265,12 @@ export default function InventoryPage() {
     } finally {
       setIsLoading(false);
     }
-  // 4. Adicionar secretariaId como dependência
   }, [selectedItem, user, toast, searchTerm, currentPage, pageCursors, secretariaId]);
 
   const handleDeleteItem = React.useCallback(async (productId: string) => {
-    if (!secretariaId) return; // Guarda de segurança
+    if (!secretariaId) return;
     setIsLoading(true);
     try {
-      // 3. Passar secretariaId
       await deleteProduct(secretariaId, productId);
       toast({ title: "Item Excluído!", variant: "success" });
       refreshAndGoToFirstPage();
@@ -300,7 +279,6 @@ export default function InventoryPage() {
     } finally {
       setIsLoading(false);
     }
-  // 4. Adicionar secretariaId como dependência
   }, [toast, secretariaId]);
   
   const handleReauthSuccess = () => {
@@ -310,12 +288,11 @@ export default function InventoryPage() {
   };
 
   const handleExportInventory = async () => {
-    if (!secretariaId) return; // Guarda de segurança
+    if (!secretariaId) return;
     setIsExporting(true);
     toast({ title: "Gerando relatório..." });
 
     try {
-        // 3. Passar secretariaId
         const allProducts = await getAllProducts(secretariaId);
 
         if (allProducts.length === 0) {
@@ -323,7 +300,6 @@ export default function InventoryPage() {
             return;
         }
         
-        // 2. Reutiliza a lógica para calcular a data de validade mais próxima
         const productsWithExpiration = await Promise.all(allProducts.map(async product => {
             if (product.isPerishable === 'Sim') {
                 const movements = await getMovementsForProducts(secretariaId, [product.id]);
@@ -344,8 +320,6 @@ export default function InventoryPage() {
             return { ...product, calculatedExpirationDate: undefined };
         }));
 
-
-        // 3. Monta o CSV com a nova coluna
         const escapeCsvCell = (cellData: any) => {
             const stringData = String(cellData || "");
             if (stringData.includes(',') || stringData.includes('"') || stringData.includes('\n')) {
@@ -354,7 +328,6 @@ export default function InventoryPage() {
             return stringData;
         };
         
-        // Adiciona a nova coluna "Validade Próxima"
         const headers = ["Código", "Nome", "Quantidade em Estoque", "Unidade", "Categoria", "Tipo", "Nº Patrimônio", "Referência", "Validade Próxima"];
         
         const rows = productsWithExpiration.map(p => [
@@ -366,11 +339,9 @@ export default function InventoryPage() {
             escapeCsvCell(p.type),
             escapeCsvCell(p.patrimony),
             escapeCsvCell(p.reference),
-            // Formata a data de validade calculada ou deixa em branco
             escapeCsvCell(p.calculatedExpirationDate ? format(parseISO(p.calculatedExpirationDate), 'dd/MM/yyyy') : 'N/A')
         ].join(','));
 
-        // 4. Gera e baixa o arquivo (sem alteração aqui)
         const csvContent = [headers.join(','), ...rows].join('\n');
         const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement("a");
