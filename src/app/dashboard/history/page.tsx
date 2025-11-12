@@ -175,7 +175,6 @@ export default function HistoryPage() {
             <CardTitle>Requisições Processadas</CardTitle>
           </CardHeader>
           <CardContent>
-            {/* --- VISUALIZAÇÃO PARA DESKTOP (TABELA) --- */}
             <div className="hidden md:block border rounded-md">
               <Table>
                 <TableHeader>
@@ -225,8 +224,6 @@ export default function HistoryPage() {
                 </TableBody>
               </Table>
             </div>
-
-            {/* --- VISUALIZAÇÃO PARA MOBILE (CARDS) --- */}
             <div className="md:hidden space-y-4">
               {isLoading ? (
                 <div className="text-center text-muted-foreground p-4">Carregando...</div>
