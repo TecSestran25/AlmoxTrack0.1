@@ -26,6 +26,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+} from "@/components/ui/card";
 
 const getBadgeVariant = (type: string) => {
     switch (type) {
@@ -165,7 +170,7 @@ export function MovementsSheet({ isOpen, onOpenChange, item }: MovementsSheetPro
           </SheetDescription>
         </SheetHeader>
         <div className="py-6">
-            <div className="border rounded-md overflow-x-auto">
+            <div className="hidden md:block border rounded-md overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -231,6 +236,69 @@ export function MovementsSheet({ isOpen, onOpenChange, item }: MovementsSheetPro
                   )}
                 </TableBody>
               </Table>
+            </div>
+            <div className="md:hidden space-y-4">
+              {isLoading ? (
+                <div className="text-center text-muted-foreground p-4">Carregando...</div>
+              ) : processedMovements.length > 0 ? (
+                processedMovements.map((movement) => (
+                  <Card key={movement.id} className={cn(movement.rowClassName)}>
+                    <CardHeader className="pb-2 pt-4">
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium text-sm">
+                          {format(parseISO(movement.date), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+                        </span>
+                        <Badge variant="outline" className={cn('font-normal text-xs', getBadgeVariant(movement.type))}>
+                          {movement.type}
+                        </Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="text-sm space-y-2 pb-4">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Quantidade:</span>
+                        <span className="font-medium">{movement.quantity}</span>
+                      </div>
+                      {movement.expirationDate && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Validade:</span>
+                          <span>{format(parseISO(movement.expirationDate), "dd/MM/yyyy")}</span>
+                        </div>
+                      )}
+                      <div className="pt-2 border-t mt-2">
+                        <div className="text-muted-foreground text-xs mb-1">Responsável/Operador:</div>
+                        {movement.type === 'Saída' && movement.requester ? (
+                          <div className="flex flex-col">
+                            <span className="font-medium">{movement.responsible}</span>
+                            <div className="flex flex-col pl-2 border-l-2 border-muted mt-1">
+                              <span className="text-xs text-muted-foreground">
+                                Solicitante: {extractRequesterInfo(movement.requester).name}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                Matrícula: {extractRequesterInfo(movement.requester).id}
+                              </span>
+                            </div>
+                          </div>
+                        ) : movement.responsible.includes("Operador:") ? (
+                          <div className="flex flex-col">
+                            <span className="font-medium">
+                              {movement.responsible.split(" Operador:")[1]}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              Resp: {movement.responsible.split(" Operador:")[0]}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="font-medium">{movement.responsible}</span>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              ) : (
+                <div className="text-center text-muted-foreground p-4 border rounded-md">
+                  Nenhuma movimentação encontrada.
+                </div>
+              )}
             </div>
         </div>
         <SheetFooter className="pt-4">
