@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { signInWithEmailAndPassword } from "firebase/auth";
+import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -13,17 +15,25 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Warehouse, Loader2, Eye, EyeOff } from "lucide-react";
+import { Loader2, Eye, EyeOff } from "lucide-react";
 import { auth } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 
 export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const { resolvedTheme } = useTheme();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  
+  const logoSrc = resolvedTheme === 'dark' ? '/LOGO_branco.png' : '/LOGO_PRETO.png';
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,7 +63,19 @@ export default function LoginPage() {
     <main className="flex min-h-screen items-center justify-center bg-background p-4">
       <Card className="mx-auto w-full max-w-sm shadow-lg">
         <CardHeader className="text-center">
-          <Warehouse className="mx-auto h-12 w-12 text-primary mb-4" />
+          {!mounted ? (
+            <div style={{ height: 100, width: 100 }} className="mx-auto mb-4" />
+          ) : (
+            <Image
+              src={logoSrc}
+              alt="AlmoxTrack Logo"
+              width={300}
+              height={100}
+              className="mx-auto mb-4"
+              priority
+            />
+          )}
+          
           <CardTitle className="text-2xl font-bold">AlmoxTrack</CardTitle>
           <CardDescription>
             Faça login para acessar o sistema de almoxarifado
@@ -84,7 +106,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={isLoading}
-                  className="pr-10" 
+                  className="pr-10"
                 />
                 <button
                   type="button"
