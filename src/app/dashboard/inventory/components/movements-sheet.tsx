@@ -31,6 +31,14 @@ import {
   CardContent,
   CardHeader,
 } from "@/components/ui/card";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+  } from "@/components/ui/dialog"; // <-- ADICIONADO
 
 const getBadgeVariant = (type: string) => {
     switch (type) {
@@ -170,6 +178,7 @@ export function MovementsSheet({ isOpen, onOpenChange, item }: MovementsSheetPro
           </SheetDescription>
         </SheetHeader>
         <div className="py-6">
+            {/* --- VISUALIZAÇÃO PARA DESKTOP (TABELA) --- */}
             <div className="hidden md:block border rounded-md overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -187,48 +196,80 @@ export function MovementsSheet({ isOpen, onOpenChange, item }: MovementsSheetPro
                       <TableCell colSpan={5} className="text-center text-muted-foreground">Carregando...</TableCell>
                     </TableRow>
                   ) : processedMovements.length > 0 ? (
-                    processedMovements.map((movement) => (
-                          <TableRow key={movement.id} className={cn(movement.rowClassName, movement.type !== 'Entrada' && 'text-gray-400 dark:text-gray-600')}>
-                            <TableCell>{format(parseISO(movement.date), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</TableCell>
-                            <TableCell>
-                              <Badge variant="outline" className={cn('font-normal', getBadgeVariant(movement.type))}>
-                                  {movement.type}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
-                                {movement.expirationDate ? format(parseISO(movement.expirationDate), "dd/MM/yyyy") : 'N/A'}
-                            </TableCell>
-                            <TableCell className="text-right font-medium">{movement.quantity}</TableCell>
-                            <TableCell>
-                                {movement.type === 'Saída' && movement.requester ? (
-                                  <div className="flex flex-col">
-                                    <span className="font-medium">
-                                      {movement.responsible}
-                                    </span>
+                    processedMovements.map((movement) => {
+                        const isExitWithPurpose = movement.type === 'Saída' && movement.purpose;
+
+                        // Conteúdo da Linha (para evitar duplicação)
+                        const rowCells = (
+                            <>
+                                <TableCell>{format(parseISO(movement.date), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</TableCell>
+                                <TableCell>
+                                    <Badge variant="outline" className={cn('font-normal', getBadgeVariant(movement.type))}>
+                                        {movement.type}
+                                    </Badge>
+                                </TableCell>
+                                <TableCell>
+                                    {movement.expirationDate ? format(parseISO(movement.expirationDate), "dd/MM/yyyy") : 'N/A'}
+                                </TableCell>
+                                <TableCell className="text-right font-medium">{movement.quantity}</TableCell>
+                                <TableCell>
+                                    {movement.type === 'Saída' && movement.requester ? (
                                     <div className="flex flex-col">
-                                      <span className="text-muted-foreground text-xs">
-                                        Solicitante: {extractRequesterInfo(movement.requester).name}
-                                      </span>
-                                      <span className="text-muted-foreground text-xs">
-                                        Matrícula: {extractRequesterInfo(movement.requester).id}
-                                      </span>
+                                        <span className="font-medium">
+                                        {movement.responsible}
+                                        </span>
+                                        <div className="flex flex-col">
+                                        <span className="text-muted-foreground text-xs">
+                                            Solicitante: {extractRequesterInfo(movement.requester).name}
+                                        </span>
+                                        <span className="text-muted-foreground text-xs">
+                                            Matrícula: {extractRequesterInfo(movement.requester).id}
+                                        </span>
+                                        </div>
                                     </div>
-                                  </div>
-                                ) : movement.responsible.includes("Operador:") ? (
-                                  <div className="flex flex-col">
-                                    <span className="font-medium">
-                                      {movement.responsible.split(" Operador:")[1]}
-                                    </span>
-                                    <span className="text-muted-foreground text-xs">
-                                      {movement.responsible.split(" Operador:")[0]}
-                                    </span>
-                                  </div>
-                                ) : (
-                                  <span>{movement.responsible}</span>
-                                )}
-                            </TableCell>
-                          </TableRow>
-                        ))
+                                    ) : movement.responsible.includes("Operador:") ? (
+                                    <div className="flex flex-col">
+                                        <span className="font-medium">
+                                        {movement.responsible.split(" Operador:")[1]}
+                                        </span>
+                                        <span className="text-muted-foreground text-xs">
+                                        {movement.responsible.split(" Operador:")[0]}
+                                        </span>
+                                    </div>
+                                    ) : (
+                                    <span>{movement.responsible}</span>
+                                    )}
+                                </TableCell>
+                            </>
+                        );
+
+                        if (isExitWithPurpose) {
+                            return (
+                                <Dialog key={movement.id}>
+                                    <DialogTrigger asChild>
+                                        <TableRow className={cn(movement.rowClassName, 'cursor-pointer hover:bg-muted/80', movement.type !== 'Entrada' && 'text-gray-400 dark:text-gray-600')}>
+                                            {rowCells}
+                                        </TableRow>
+                                    </DialogTrigger>
+                                    <DialogContent>
+                                        <DialogHeader>
+                                            <DialogTitle>Justificativa da Saída</DialogTitle>
+                                            <DialogDescription>
+                                                Registrada por {movement.responsible.split(" Operador:")[1] || movement.responsible} em {format(parseISO(movement.date), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}.
+                                            </DialogDescription>
+                                        </DialogHeader>
+                                        <div className="py-4 text-sm whitespace-pre-wrap">{movement.purpose}</div>
+                                    </DialogContent>
+                                </Dialog>
+                            );
+                        }
+
+                        return (
+                            <TableRow key={movement.id} className={cn(movement.rowClassName, movement.type !== 'Entrada' && 'text-gray-400 dark:text-gray-600')}>
+                                {rowCells}
+                            </TableRow>
+                        );
+                    })
                   ) : (
                     <TableRow>
                       <TableCell colSpan={5} className="text-center text-muted-foreground">Nenhuma movimentação encontrada para este item.</TableCell>
@@ -237,63 +278,97 @@ export function MovementsSheet({ isOpen, onOpenChange, item }: MovementsSheetPro
                 </TableBody>
               </Table>
             </div>
+
+            {/* --- VISUALIZAÇÃO PARA MOBILE (CARDS) --- */}
             <div className="md:hidden space-y-4">
               {isLoading ? (
                 <div className="text-center text-muted-foreground p-4">Carregando...</div>
               ) : processedMovements.length > 0 ? (
-                processedMovements.map((movement) => (
-                  <Card key={movement.id} className={cn(movement.rowClassName)}>
-                    <CardHeader className="pb-2 pt-4">
-                      <div className="flex justify-between items-center">
-                        <span className="font-medium text-sm">
-                          {format(parseISO(movement.date), "dd/MM/yyyy HH:mm", { locale: ptBR })}
-                        </span>
-                        <Badge variant="outline" className={cn('font-normal text-xs', getBadgeVariant(movement.type))}>
-                          {movement.type}
-                        </Badge>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="text-sm space-y-2 pb-4">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Quantidade:</span>
-                        <span className="font-medium">{movement.quantity}</span>
-                      </div>
-                      {movement.expirationDate && (
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Validade:</span>
-                          <span>{format(parseISO(movement.expirationDate), "dd/MM/yyyy")}</span>
-                        </div>
-                      )}
-                      <div className="pt-2 border-t mt-2">
-                        <div className="text-muted-foreground text-xs mb-1">Responsável/Operador:</div>
-                        {movement.type === 'Saída' && movement.requester ? (
-                          <div className="flex flex-col">
-                            <span className="font-medium">{movement.responsible}</span>
-                            <div className="flex flex-col pl-2 border-l-2 border-muted mt-1">
-                              <span className="text-xs text-muted-foreground">
-                                Solicitante: {extractRequesterInfo(movement.requester).name}
-                              </span>
-                              <span className="text-xs text-muted-foreground">
-                                Matrícula: {extractRequesterInfo(movement.requester).id}
-                              </span>
-                            </div>
-                          </div>
-                        ) : movement.responsible.includes("Operador:") ? (
-                          <div className="flex flex-col">
-                            <span className="font-medium">
-                              {movement.responsible.split(" Operador:")[1]}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              Resp: {movement.responsible.split(" Operador:")[0]}
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="font-medium">{movement.responsible}</span>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))
+                processedMovements.map((movement) => {
+                    const isExitWithPurpose = movement.type === 'Saída' && movement.purpose;
+
+                    // Conteúdo do Card (para evitar duplicação)
+                    const cardBody = (
+                        <>
+                            <CardHeader className="pb-2 pt-4">
+                                <div className="flex justify-between items-center">
+                                    <span className="font-medium text-sm">
+                                    {format(parseISO(movement.date), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+                                    </span>
+                                    <Badge variant="outline" className={cn('font-normal text-xs', getBadgeVariant(movement.type))}>
+                                    {movement.type}
+                                    </Badge>
+                                </div>
+                            </CardHeader>
+                            <CardContent className="text-sm space-y-2 pb-4">
+                                <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Quantidade:</span>
+                                    <span className="font-medium">{movement.quantity}</span>
+                                </div>
+                                {movement.expirationDate && (
+                                    <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Validade:</span>
+                                    <span>{format(parseISO(movement.expirationDate), "dd/MM/yyyy")}</span>
+                                    </div>
+                                )}
+                                <div className="pt-2 border-t mt-2">
+                                    <div className="text-muted-foreground text-xs mb-1">Responsável/Operador:</div>
+                                    {movement.type === 'Saída' && movement.requester ? (
+                                    <div className="flex flex-col">
+                                        <span className="font-medium">{movement.responsible}</span>
+                                        <div className="flex flex-col pl-2 border-l-2 border-muted mt-1">
+                                        <span className="text-xs text-muted-foreground">
+                                            Solicitante: {extractRequesterInfo(movement.requester).name}
+                                        </span>
+                                        <span className="text-xs text-muted-foreground">
+                                            Matrícula: {extractRequesterInfo(movement.requester).id}
+                                        </span>
+                                        </div>
+                                    </div>
+                                    ) : movement.responsible.includes("Operador:") ? (
+                                    <div className="flex flex-col">
+                                        <span className="font-medium">
+                                        {movement.responsible.split(" Operador:")[1]}
+                                        </span>
+                                        <span className="text-xs text-muted-foreground">
+                                        Resp: {movement.responsible.split(" Operador:")[0]}
+                                        </span>
+                                    </div>
+                                    ) : (
+                                    <span className="font-medium">{movement.responsible}</span>
+                                    )}
+                                </div>
+                            </CardContent>
+                        </>
+                    );
+
+                    if (isExitWithPurpose) {
+                        return (
+                            <Dialog key={movement.id}>
+                                <DialogTrigger asChild>
+                                    <Card className={cn(movement.rowClassName, 'cursor-pointer active:bg-muted/80')}>
+                                        {cardBody}
+                                    </Card>
+                                </DialogTrigger>
+                                <DialogContent>
+                                    <DialogHeader>
+                                        <DialogTitle>Justificativa da Saída</DialogTitle>
+                                        <DialogDescription>
+                                            Registrada por {movement.responsible.split(" Operador:")[1] || movement.responsible} em {format(parseISO(movement.date), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}.
+                                        </DialogDescription>
+                                    </DialogHeader>
+                                    <div className="py-4 text-sm whitespace-pre-wrap">{movement.purpose}</div>
+                                </DialogContent>
+                            </Dialog>
+                        );
+                    }
+
+                    return (
+                        <Card key={movement.id} className={cn(movement.rowClassName)}>
+                            {cardBody}
+                        </Card>
+                    );
+                })
               ) : (
                 <div className="text-center text-muted-foreground p-4 border rounded-md">
                   Nenhuma movimentação encontrada.

@@ -44,6 +44,7 @@ export type Movement = {
     changes?: string;
     expirationDate?: string;
     requester?: string;
+    purpose?: string;
 };
 
 export type RequestItem = {
@@ -451,7 +452,8 @@ export const finalizeExit = async (secretariaId: string, exitData: ExitData, req
                     department: exitData.department,
                     productType: productData.type,
                     expirationDate: item.expirationDate || "",
-                    requester: exitData.requester
+                    requester: exitData.requester,
+                    purpose: exitData.purpose || "",
                 };
                 const movementRef = doc(movementsCollection);
                 transaction.set(movementRef, movementData);
